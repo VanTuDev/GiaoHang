@@ -1,0 +1,24 @@
+{
+  "name": "POS Bahung - Hệ thống quản lý bán hàng",
+  "short_name": "POS Bahung",
+  "description": "Hệ thống quản lý bán hàng dành cho doanh nghiệp vừa và nhỏ",
+  "start_url": "/login",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#4a90e2",
+  "gcm_sender_id": "103953800507",
+  "icons": [
+    {
+      "src": "/logo.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "prefer_related_applications": false,
+  "related_applications": [],
+  "orientation": "portrait",
+  "lang": "vi-VN",
+  "categories": ["business", "productivity"],
+  "screenshots": []
+} 

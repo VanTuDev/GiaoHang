@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/logo.svg" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#4a90e2" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta
+      name="apple-mobile-web-app-status-bar-style"
+      content="black-translucent"
+    />
+    <meta name="format-detection" content="telephone=no" />
+    <title>POS Bahung - Hệ thống quản lý bán hàng</title>
+    <meta
+      name="description"
+      content="Hệ thống quản lý bán hàng POS Bahung dành cho doanh nghiệp vừa và nhỏ"
+    />
+    <link rel="apple-touch-icon" href="/logo.svg" />
+    <link rel="manifest" href="/manifest.json" />
+
+    <!-- Meta tags mới cho PWA -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="application-name" content="POS Bahung" />
+    <meta name="apple-mobile-web-app-title" content="POS Bahung" />
+    <meta name="msapplication-starturl" content="/login" />
+    <meta name="msapplication-TileColor" content="#4a90e2" />
+
+    <!-- iOS splash screens -->
+    <link rel="apple-touch-startup-image" href="/logo.svg" />
+
+    <!-- Script để đảm bảo Push Notification làm việc tốt hơn trên iOS -->
+    <script>
+      // Tối ưu cho iOS
+      if (navigator.serviceWorker && window.PushManager) {
+        window.addEventListener("load", () => {
+          // Hỗ trợ hệ thống thông báo iOS
+          if (navigator.userAgent.match(/(iPad|iPhone|iPod)/g)) {
+            console.log("iOS device detected, configuring special handling");
+
+            // Force reload khi đầu tiên load PWA, đảm bảo SW được đăng ký
+            if (window.matchMedia("(display-mode: standalone)").matches) {
+              if (!localStorage.getItem("pwa_ios_reload")) {
+                localStorage.setItem("pwa_ios_reload", "true");
+                window.location.reload();
+              }
+            }
+          }
+        });
+      }
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+    <noscript>
+      <div style="padding: 20px; text-align: center">
+        <h2>JavaScript bị tắt</h2>
+        <p>
+          Ứng dụng này yêu cầu JavaScript để hoạt động. Vui lòng bật JavaScript
+          trong trình duyệt của bạn.
+        </p>
+      </div>
+    </noscript>
+  </body>
+</html>
