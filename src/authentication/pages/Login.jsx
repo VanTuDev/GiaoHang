@@ -6,6 +6,7 @@ import axiosClient from "../api/axiosClient";
 import { AUTH_ENDPOINTS } from "../api/endpoints";
 import { useAuthState } from "../hooks/useAuth";
 import { useNavigate, useLocation, Link } from "react-router-dom";
+import { getPostLoginPath } from "../../utils/navigation";
 
 export default function Login() {
    const [loading, setLoading] = useState(false);
@@ -21,9 +22,13 @@ export default function Login() {
             : { phone: values.phone, password: values.password };
          const { data } = await axiosClient.post(AUTH_ENDPOINTS.login, payload);
          if (data?.success) {
+            // Lưu session (user, accessToken, refreshToken)
             saveSession(data.data);
             message.success("Đăng nhập thành công");
-            const from = location.state?.from || "/dashboard";
+            // Nếu user là Admin nhưng login ở trang user, vẫn điều hướng về trang phù hợp role
+            const role = data.data?.user?.role;
+            const defaultPath = getPostLoginPath(role);
+            const from = location.state?.from || defaultPath;
             navigate(from, { replace: true });
          }
       } catch (e) {

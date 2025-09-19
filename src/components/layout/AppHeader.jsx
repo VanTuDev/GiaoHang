@@ -2,8 +2,8 @@ import React from "react";
 import { Layout, Menu } from "antd";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import useLocalUser from "../../authentication/hooks/useLocalUser";
-import UserDropdown from "./UserDropdown";
-import UserInfoModal from "./UserInfoModal";
+import UserDropdown from "../dropdown/UserDropdown";
+import UserInfoModal from "../modal/UserInfoModal";
 
 const { Header } = Layout;
 

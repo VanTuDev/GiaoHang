@@ -5,11 +5,14 @@ import DashboardLayout from "./layouts/DashboardLayout";
 import Overview from "./pages/user/Overview";
 import RequireAuth from "./authentication/routes/RequireAuth";
 import ProfilePage from "./features/profile/pages/Profile";
-import AdminLayout from "./admin/layouts/AdminLayout";
-import AdminOverview from "./admin/pages/Overview";
-import AdminUsers from "./admin/pages/Users";
-import AdminLogin from "./admin/pages/Login";
-import RequireAdmin from "./admin/routes/RequireAdmin";
+import Landing from "./components/landing/Landing";
+// Admin chuyển sang src/pages/admin/*
+import AdminDashBoard from "./pages/admin/AdminDashBoard";
+import AdminLogin from "./pages/admin/authentication/AdminLogin";
+import AccountsPage from "./pages/admin/outlet/AccountsPage";
+import DriversPage from "./pages/admin/outlet/DriversPage";
+import RevenuePage from "./pages/admin/outlet/RevenuePage";
+import ReportsPage from "./pages/admin/outlet/ReportsPage";
 
 export default function App() {
   return (
@@ -26,7 +29,7 @@ export default function App() {
       <Router>
         <Routes>
           {/* Public */}
-          <Route path="/" element={<LandingPage />} />
+          <Route path="/" element={<Landing />} />
 
           {/* Auth */}
           <Route path="/auth/login" element={<Login />} />
@@ -45,11 +48,11 @@ export default function App() {
 
           {/* Admin */}
           <Route path="/admin/login" element={<AdminLogin />} />
-          <Route element={<RequireAdmin />}>
-            <Route path="/admin" element={<AdminLayout />}>
-              <Route index element={<AdminOverview />} />
-              <Route path="users" element={<AdminUsers />} />
-            </Route>
+          <Route path="/admin" element={<AdminDashBoard />}>
+            <Route path="accounts" element={<AccountsPage />} />
+            <Route path="drivers" element={<DriversPage />} />
+            <Route path="revenue" element={<RevenuePage />} />
+            <Route path="reports" element={<ReportsPage />} />
           </Route>
 
           {/* Fallback */}
@@ -61,5 +64,4 @@ export default function App() {
 }
 
 // Placeholder components
-const LandingPage = () => <div>Trang chủ</div>;
 

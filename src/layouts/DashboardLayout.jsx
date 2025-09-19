@@ -1,13 +1,16 @@
-import { Layout, Modal } from "antd";
-import { Outlet } from "react-router-dom";
+import { Layout } from "antd";
+import { Outlet, useNavigate } from "react-router-dom";
 import AppHeader from "../components/layout/AppHeader";
+import { useAuthState } from "../authentication/hooks/useAuth";
+import { useAxiosAuth } from "../authentication/hooks/useAxiosAuth";
 
 const { Header, Content } = Layout;
 
 export default function DashboardLayout() {
-   const selected = location.pathname.startsWith("/dashboard/users")
-      ? ["users"]
-      : ["home"];
+   const navigate = useNavigate();
+   const { accessToken } = useAuthState();
+   // Gắn Authorization header cho tất cả request qua axiosClient
+   useAxiosAuth(accessToken);
 
    return (
       <Layout className="min-h-screen bg-white">
