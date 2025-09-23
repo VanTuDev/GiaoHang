@@ -2,8 +2,10 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-d
 import { ConfigProvider, theme } from "antd";
 import { Login, Register, VerifyEmail, ForgotPassword, ResetPassword } from "./authentication/pages";
 import DashboardLayout from "./layouts/DashboardLayout";
+import DriverLogin from "./pages/driver/DriverLogin";
 import Overview from "./pages/user/Overview";
 import RequireAuth from "./authentication/routes/RequireAuth";
+import RequireDriver from "./authentication/routes/RequireDriver";
 import ProfilePage from "./features/profile/pages/Profile";
 import Landing from "./components/landing/Landing";
 // Admin chuyển sang src/pages/admin/*
@@ -13,6 +15,18 @@ import AccountsPage from "./pages/admin/outlet/AccountsPage";
 import DriversPage from "./pages/admin/outlet/DriversPage";
 import RevenuePage from "./pages/admin/outlet/RevenuePage";
 import ReportsPage from "./pages/admin/outlet/ReportsPage";
+import VehiclesBrowser from "./pages/user/VehiclesBrowser";
+import OrderCreate from "./pages/user/OrderCreate";
+import Chat from "./pages/user/Chat";
+import Contact from "./pages/user/Contact";
+import Orders from "./pages/user/Orders";
+import DriverDashboardLayout from "./layouts/DriverDashboardLayout";
+import DriverHome from "./pages/driver/Home";
+import DriverProfile from "./pages/driver/Profile";
+import DriverOrders from "./pages/driver/Orders";
+import DriverStatus from "./pages/driver/Status";
+import DriverChat from "./pages/driver/Chat";
+import DriverContact from "./pages/driver/Contact";
 
 export default function App() {
   return (
@@ -20,8 +34,8 @@ export default function App() {
       theme={{
         algorithm: theme.defaultAlgorithm,
         token: {
-          colorPrimary: "#166534", // xanh lá thẫm
-          colorInfo: "#166534",
+          colorPrimary: "#1e40af", // xanh dương thẫm
+          colorInfo: "#3b82f6", // xanh dương nhạt
           borderRadius: 8,
         },
       }}
@@ -38,11 +52,31 @@ export default function App() {
           <Route path="/auth/forgot" element={<ForgotPassword />} />
           <Route path="/auth/reset" element={<ResetPassword />} />
 
+          {/* Driver */}
+          <Route path="/driver/login" element={<DriverLogin />} />
+
           {/* App */}
           <Route element={<RequireAuth />}>
             <Route path="/dashboard" element={<DashboardLayout />}>
               <Route index element={<Overview />} />
+              <Route path="orders" element={<Orders />} />
+              <Route path="chat" element={<Chat />} />
+              <Route path="contact" element={<Contact />} />
               <Route path="profile" element={<ProfilePage />} />
+              <Route path="vehicles" element={<VehiclesBrowser />} />
+              <Route path="book" element={<OrderCreate />} />
+            </Route>
+          </Route>
+
+          {/* Driver Dashboard */}
+          <Route element={<RequireDriver />}>
+            <Route path="/driver" element={<DriverDashboardLayout />}>
+              <Route index element={<DriverHome />} />
+              <Route path="profile" element={<DriverProfile />} />
+              <Route path="orders" element={<DriverOrders />} />
+              <Route path="status" element={<DriverStatus />} />
+              <Route path="chat" element={<DriverChat />} />
+              <Route path="contact" element={<DriverContact />} />
             </Route>
           </Route>
 

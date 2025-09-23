@@ -2,6 +2,7 @@
 // Admin -> /admin, các role còn lại -> /dashboard
 export function getPostLoginPath(role) {
    if (role === "Admin") return "/admin";
+   if (role === "Driver") return "/driver";
    return "/dashboard";
 }
 

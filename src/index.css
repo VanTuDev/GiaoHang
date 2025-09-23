@@ -1,3 +1,18 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Tabs hover xanh lá cho trang auth */
+.auth-tabs-green .ant-tabs-tab:hover {
+   color: #15803d;
+   /* green-700 */
+}
+
+.auth-tabs-green .ant-tabs-tab.ant-tabs-tab-active .ant-tabs-tab-btn {
+   color: #15803d !important;
+}
+
+.auth-tabs-green .ant-tabs-ink-bar {
+   background: #16a34a;
+   /* green-600 */
+}

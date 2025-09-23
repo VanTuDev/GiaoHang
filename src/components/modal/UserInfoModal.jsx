@@ -22,6 +22,8 @@ import {
    SaveOutlined,
 } from "@ant-design/icons";
 import { profileService } from "../../features/profile/api/profileService";
+import { driverService } from "../../features/driver/api/driverService";
+import DriverApplyModal from "./DriverApplyModal";
 
 export default function UserInfoModal({ open, onClose, user }) {
    const [loading, setLoading] = useState(false);
@@ -29,6 +31,7 @@ export default function UserInfoModal({ open, onClose, user }) {
    const [profile, setProfile] = useState(null);
    const [uploading, setUploading] = useState(false);
    const [form] = Form.useForm();
+   const [applyOpen, setApplyOpen] = useState(false);
 
    useEffect(() => {
       if (!open) return;
@@ -164,9 +167,19 @@ export default function UserInfoModal({ open, onClose, user }) {
                         {p?.isEmailVerified ? "Đã xác thực" : "Chưa"}
                      </Descriptions.Item>
                   </Descriptions>
+                  <div className="pt-3">
+                     <Button
+                        className="!bg-green-700"
+                        type="primary"
+                        onClick={() => setApplyOpen(true)}
+                     >
+                        Yêu cầu lên Tài xế
+                     </Button>
+                  </div>
                </Card>
             </div>
          </Spin>
+         <DriverApplyModal open={applyOpen} onClose={() => setApplyOpen(false)} onSuccess={() => { }} />
       </Modal>
    );
 }

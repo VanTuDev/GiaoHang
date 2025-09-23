@@ -29,9 +29,11 @@ export default function AppHeader() {
    };
 
    return (
-      <Header className="flex items-center justify-between bg-white border-b">
-         <Link to="/dashboard" className="text-lg font-semibold text-green-700">
-            GiaoHangDaNang
+      <Header className="flex items-center justify-between bg-white border-b" style={{ padding: 0, position: 'sticky', top: 0, zIndex: 100, height: 64 }}>
+         <Link to="/dashboard" className="text-lg font-semibold text-blue-700">
+            <div className="flex items-center gap-2">
+               <img className="h-10 ml-5" src="/imgs/logonen.png" alt="Bengo logo" />
+            </div>
          </Link>
          <Menu mode="horizontal" selectedKeys={selected} className="min-w-0 border-none" items={menuItems} />
          <div className="flex items-center gap-3">
