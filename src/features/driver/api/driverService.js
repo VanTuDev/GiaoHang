@@ -8,6 +8,19 @@ export const driverService = {
    adminReview: (id, payload) => axiosClient.put(DRIVER_ENDPOINTS.adminReview(id), payload),
    adminGetOne: (id) => axiosClient.get(DRIVER_ENDPOINTS.adminGetOne(id)),
    getOne: (id) => axiosClient.get(DRIVER_ENDPOINTS.getOne(id)),
+
+   // Lấy danh sách quận/huyện
+   getDistricts: () => axiosClient.get(DRIVER_ENDPOINTS.districts),
+
+   // Cập nhật khu vực hoạt động
+   updateServiceAreas: (serviceAreas) => axiosClient.put(DRIVER_ENDPOINTS.updateServiceAreas, { serviceAreas }),
+
+   // Lấy thông tin tài xế
+   getDriverInfo: () => axiosClient.get(DRIVER_ENDPOINTS.info),
+
+   // Cập nhật thông tin cá nhân
+   updateProfile: (data) => axiosClient.put(DRIVER_ENDPOINTS.updateProfile, data),
+
+   // Upload avatar
+   uploadAvatar: (data) => axiosClient.post(DRIVER_ENDPOINTS.uploadAvatar, data),
 };
-
-

@@ -27,12 +27,9 @@ export default function DriverLogin() {
             // Lưu session
             saveSession(data.data);
             const role = data.data?.user?.role;
-            if (role !== "Driver") {
-               message.warning("Tài khoản không phải Tài xế. Vui lòng dùng đăng nhập thông thường.");
-            }
             const defaultPath = getPostLoginPath(role);
             const from = location.state?.from || defaultPath;
-            message.success("Đăng nhập tài xế thành công");
+            message.success("Đăng nhập thành công");
             navigate(from, { replace: true });
          }
       } catch (e) {

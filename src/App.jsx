@@ -27,6 +27,8 @@ import DriverOrders from "./pages/driver/Orders";
 import DriverStatus from "./pages/driver/Status";
 import DriverChat from "./pages/driver/Chat";
 import DriverContact from "./pages/driver/Contact";
+import DriverRevenue from "./pages/driver/Revenue";
+import VehicleManagement from "./pages/driver/VehicleManagement";
 
 export default function App() {
   return (
@@ -74,7 +76,9 @@ export default function App() {
               <Route index element={<DriverHome />} />
               <Route path="profile" element={<DriverProfile />} />
               <Route path="orders" element={<DriverOrders />} />
+              <Route path="revenue" element={<DriverRevenue />} />
               <Route path="status" element={<DriverStatus />} />
+              <Route path="vehicles" element={<VehicleManagement />} />
               <Route path="chat" element={<DriverChat />} />
               <Route path="contact" element={<DriverContact />} />
             </Route>
@@ -96,6 +100,3 @@ export default function App() {
     </ConfigProvider>
   );
 }
-
-// Placeholder components
-
