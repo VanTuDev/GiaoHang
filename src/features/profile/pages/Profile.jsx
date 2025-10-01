@@ -47,12 +47,11 @@ export default function ProfilePage() {
 
    const onUploadAvatar = async ({ file }) => {
       try {
-         const res = await profileService.uploadAvatar(file);
-         console.log("[POST /profile/me/avatar]", res.data);
+         await profileService.uploadAvatar(file);
          message.success("Đã cập nhật ảnh đại diện");
          fetchAll();
       } catch (e) {
-         console.error(e);
+         console.error("Lỗi khi upload avatar:", e);
          message.error("Upload thất bại");
       }
    };
@@ -73,12 +72,11 @@ export default function ProfilePage() {
 
    const onUploadDriverAvatar = async ({ file }) => {
       try {
-         const res = await profileService.uploadDriverAvatar(file);
-         console.log("[POST /profile/driver/me/avatar]", res.data);
+         await profileService.uploadDriverAvatar(file);
          message.success("Đã cập nhật ảnh tài xế");
          fetchAll();
       } catch (e) {
-         console.error(e);
+         console.error("Lỗi khi upload ảnh tài xế:", e);
          message.error("Upload thất bại");
       }
    };
@@ -235,5 +233,3 @@ export default function ProfilePage() {
       </div>
    );
 }
-
-

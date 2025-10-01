@@ -22,7 +22,6 @@ import {
    SaveOutlined,
 } from "@ant-design/icons";
 import { profileService } from "../../features/profile/api/profileService";
-import { driverService } from "../../features/driver/api/driverService";
 import DriverApplyModal from "./DriverApplyModal";
 
 export default function UserInfoModal({ open, onClose, user }) {
@@ -97,17 +96,20 @@ export default function UserInfoModal({ open, onClose, user }) {
                         accept="image/*"
                         showUploadList={false}
                         disabled={loading || uploading}
-                        customRequest={({ file, onSuccess }) => {
+                        customRequest={async ({ file, onSuccess }) => {
                            setUploading(true);
-                           profileService
-                              .uploadAvatar(file)
-                              .then(() => profileService.me())
-                              .then((refresh) => setProfile(refresh.data?.data || null))
-                              .catch(() => message.error("Upload thất bại"))
-                              .finally(() => {
-                                 setUploading(false);
-                                 onSuccess?.("ok");
-                              });
+                           try {
+                              await profileService.uploadAvatar(file);
+                              const refresh = await profileService.me();
+                              setProfile(refresh.data?.data || null);
+                              message.success("Đã cập nhật ảnh đại diện");
+                           } catch (error) {
+                              console.error("Lỗi khi upload avatar:", error);
+                              message.error("Upload thất bại");
+                           } finally {
+                              setUploading(false);
+                              onSuccess?.("ok");
+                           }
                         }}
                      >
                         <Tooltip title="Đổi ảnh đại diện">

@@ -10,6 +10,8 @@ import {
    ShoppingCartOutlined,
    MessageOutlined,
    PhoneOutlined,
+   StarOutlined,
+   WarningOutlined,
 } from "@ant-design/icons";
 
 const { Sider, Content, Footer } = Layout;
@@ -44,6 +46,8 @@ export default function DashboardLayout() {
                      { key: "/dashboard", icon: <HomeOutlined />, label: "Trang chủ" },
                      { key: "/dashboard/book", icon: <CarOutlined />, label: "Thuê vận chuyển" },
                      { key: "/dashboard/orders", icon: <ShoppingCartOutlined />, label: "Đơn hàng" },
+                     { key: "/dashboard/feedback", icon: <StarOutlined />, label: "Đánh giá" },
+                     { key: "/dashboard/reports", icon: <WarningOutlined />, label: "Báo cáo" },
                      { key: "/dashboard/chat", icon: <MessageOutlined />, label: "Chat với tài xế" },
                      { key: "/dashboard/contact", icon: <PhoneOutlined />, label: "Liên hệ" },
                   ]}

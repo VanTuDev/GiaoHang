@@ -1,338 +1,772 @@
-   "use client"
+import React, { useState, useEffect } from "react";
+import {
+   Row,
+   Col,
+   Card,
+   Input,
+   Select,
+   Tag,
+   Avatar,
+   Button,
+   Statistic,
+   Space,
+   Spin,
+   Empty,
+   Modal,
+   Descriptions,
+   Divider,
+   Steps,
+   message,
+   Alert,
+   Badge
+} from "antd";
+import {
+   SearchOutlined,
+   TruckOutlined,
+   EnvironmentOutlined,
+   ClockCircleOutlined,
+   PhoneOutlined,
+   UserOutlined,
+   StarFilled,
+   FilterOutlined,
+   EyeOutlined,
+   MessageOutlined,
+   InboxOutlined,
+   ProfileOutlined,
+   CheckCircleOutlined,
+   ExclamationCircleOutlined,
+   StarOutlined,
+   WarningOutlined
+} from "@ant-design/icons";
+import { orderService } from "../../features/orders/api/orderService";
+import { feedbackService } from "../../features/feedback/api/feedbackService";
+import { formatCurrency, formatDate } from "../../utils/formatters";
+import FeedbackModal from "./components/FeedbackModal";
+import ReportViolationModal from "./components/ReportViolationModal";
+import FeedbackDisplay from "./components/FeedbackDisplay";
 
-   import React, { useState } from "react"
-   import { Row, Col, Card, Input, Select, Tag, Avatar, Button, Statistic, Space } from "antd"
-   import {
-      SearchOutlined,
-      TruckOutlined,
-      EnvironmentOutlined,
-      ClockCircleOutlined,
-      PhoneOutlined,
-      UserOutlined,
-      StarFilled,
-      FilterOutlined,
-      EyeOutlined,
-      MessageOutlined,
-      InboxOutlined,
-      ProfileOutlined
-   } from "@ant-design/icons"
+const { Step } = Steps;
 
-   // Mock data for orders
-   const ordersData = [
-      {
-         id: "DH001",
-         customerName: "Nguyễn Văn An",
-         customerPhone: "0901234567",
-         pickupAddress: "123 Lê Duẩn, Hải Châu, Đà Nẵng",
-         deliveryAddress: "456 Nguyễn Văn Linh, Sơn Trà, Đà Nẵng",
-         vehicleType: "Xe tải nhỏ",
-         weight: "800kg",
-         distance: "12km",
-         totalPrice: 580000,
-         status: "waiting_driver", // waiting_driver, driver_assigned, picked_up, in_transit, delivered, cancelled
-         createdAt: "2025-01-23T08:30:00",
-         estimatedTime: "45 phút",
-         driver: null,
-         hasInsurance: true,
-         requiresLoading: true,
-         orderImage: "/wrapped-parcel.png",
-         priority: "normal",
-      },
-      {
-         id: "DH002",
-         customerName: "Trần Thị Bình",
-         customerPhone: "0912345678",
-         pickupAddress: "789 Hoàng Diệu, Ngũ Hành Sơn, Đà Nẵng",
-         deliveryAddress: "321 Điện Biên Phủ, Cẩm Lệ, Đà Nẵng",
-         vehicleType: "Xe tải vừa",
-         weight: "2.5 tấn",
-         distance: "18km",
-         totalPrice: 1180000,
-         status: "driver_assigned",
-         createdAt: "2025-01-23T09:15:00",
-         estimatedTime: "60 phút",
-         driver: {
-            name: "Lê Văn Cường",
-            phone: "0923456789",
-            rating: 4.8,
-            avatar: "/professional-driver.png",
-            vehicleNumber: "43A-12345",
-         },
-         hasInsurance: false,
-         requiresLoading: true,
-         orderImage: "/assorted-living-room-furniture.png",
-         priority: "high",
-      },
-      {
-         id: "DH003",
-         customerName: "Phạm Minh Đức",
-         customerPhone: "0934567890",
-         pickupAddress: "FPT Software, Ngũ Hành Sơn, Đà Nẵng",
-         deliveryAddress: "567 Trần Phú, Hải Châu, Đà Nẵng",
-         vehicleType: "Xe thùng kín",
-         weight: "1.2 tấn",
-         distance: "8km",
-         totalPrice: 660000,
-         status: "in_transit",
-         createdAt: "2025-01-23T07:45:00",
-         estimatedTime: "30 phút",
-         driver: {
-            name: "Hoàng Văn Dũng",
-            phone: "0945678901",
-            rating: 4.6,
-            avatar: "/driver2-game.png",
-            vehicleNumber: "43B-67890",
-         },
-         hasInsurance: true,
-         requiresLoading: false,
-         orderImage: "/electronics-components.png",
-         priority: "normal",
-      },
-      {
-         id: "DH004",
-         customerName: "Võ Thị Hoa",
-         customerPhone: "0956789012",
-         pickupAddress: "234 Phan Châu Trinh, Hải Châu, Đà Nẵng",
-         deliveryAddress: "890 Võ Nguyên Giáp, Sơn Trà, Đà Nẵng",
-         vehicleType: "Xe bán tải",
-         weight: "600kg",
-         distance: "15km",
-         totalPrice: 775000,
-         status: "waiting_driver",
-         createdAt: "2025-01-23T10:00:00",
-         estimatedTime: "50 phút",
-         driver: null,
-         hasInsurance: false,
-         requiresLoading: true,
-         orderImage: "/modern-kitchen-appliances.png",
-         priority: "urgent",
-      },
-      {
-         id: "DH005",
-         customerName: "Đặng Quốc Khánh",
-         customerPhone: "0967890123",
-         pickupAddress: "678 Lý Thường Kiệt, Cẩm Lệ, Đà Nẵng",
-         deliveryAddress: "432 Hùng Vương, Hải Châu, Đà Nẵng",
-         vehicleType: "Xe tải trung",
-         weight: "4 tấn",
-         distance: "22km",
-         totalPrice: 1860000,
-         status: "picked_up",
-         createdAt: "2025-01-23T06:30:00",
-         estimatedTime: "75 phút",
-         driver: {
-            name: "Nguyễn Thanh Long",
-            phone: "0978901234",
-            rating: 4.9,
-            avatar: "/driver3-generic.png",
-            vehicleNumber: "43C-11111",
-         },
-         hasInsurance: true,
-         requiresLoading: true,
-         orderImage: "/construction-site-city.png",
-         priority: "normal",
-      },
-   ]
+const statusConfig = {
+   Created: { label: "Đang tìm tài xế", color: "gold", icon: <ClockCircleOutlined /> },
+   Accepted: { label: "Đã có tài xế", color: "blue", icon: <UserOutlined /> },
+   PickedUp: { label: "Đã lấy hàng", color: "purple", icon: <ProfileOutlined /> },
+   Delivering: { label: "Đang giao", color: "orange", icon: <TruckOutlined /> },
+   Delivered: { label: "Đã giao", color: "green", icon: <CheckCircleOutlined /> },
+   Cancelled: { label: "Đã hủy", color: "red", icon: <ExclamationCircleOutlined /> },
+};
 
-   const statusConfig = {
-      waiting_driver: { label: "Đang tìm tài xế", color: "gold", icon: <ClockCircleOutlined /> },
-      driver_assigned: { label: "Đã có tài xế", color: "blue", icon: <UserOutlined /> },
-      picked_up: { label: "Đã lấy hàng", color: "purple", icon: <ProfileOutlined /> },
-      in_transit: { label: "Đang giao", color: "orange", icon: <TruckOutlined /> },
-      delivered: { label: "Đã giao", color: "green", icon: <InboxOutlined /> },
-      cancelled: { label: "Đã hủy", color: "red", icon: <ClockCircleOutlined /> },
-   }
+export default function OrdersPage() {
+   const [searchTerm, setSearchTerm] = useState("");
+   const [statusFilter, setStatusFilter] = useState("all");
+   const [loading, setLoading] = useState(false);
+   const [error, setError] = useState(null);
+   const [orders, setOrders] = useState([]);
+   const [selectedOrder, setSelectedOrder] = useState(null);
+   const [detailModalVisible, setDetailModalVisible] = useState(false);
 
-   const priorityConfig = {
-      normal: { label: "Bình thường", color: "default" },
-      high: { label: "Cao", color: "orange" },
-      urgent: { label: "Khẩn cấp", color: "red" },
-   }
+   // Feedback và Report states
+   const [feedbackModalVisible, setFeedbackModalVisible] = useState(false);
+   const [reportModalVisible, setReportModalVisible] = useState(false);
+   const [selectedOrderForFeedback, setSelectedOrderForFeedback] = useState(null);
+   const [selectedDriverForReport, setSelectedDriverForReport] = useState(null);
+   const [feedbacks, setFeedbacks] = useState([]);
+   const [feedbackStats, setFeedbackStats] = useState(null);
+   const [feedbackLoading, setFeedbackLoading] = useState(false);
 
-   export default function OrdersPage() {
-      const [searchTerm, setSearchTerm] = useState("")
-      const [statusFilter, setStatusFilter] = useState("all")
-      const [priorityFilter, setPriorityFilter] = useState("all")
+   // Tải danh sách đơn hàng
+   useEffect(() => {
+      const fetchOrders = async () => {
+         setLoading(true);
+         setError(null);
 
-      // Filter orders based on search and filters
-      const filteredOrders = ordersData.filter((order) => {
-         const matchesSearch =
-            order.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            order.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            order.pickupAddress.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            order.deliveryAddress.toLowerCase().includes(searchTerm.toLowerCase())
+         try {
+            // Lấy danh sách đơn hàng của khách hàng
+            const status = statusFilter !== "all" ? statusFilter : undefined;
+            const response = await orderService.getMyOrders({ status });
 
-         const matchesStatus = statusFilter === "all" || order.status === statusFilter
-         const matchesPriority = priorityFilter === "all" || order.priority === priorityFilter
+            if (response.data?.success) {
+               setOrders(response.data.data || []);
+            } else {
+               setError("Không thể tải danh sách đơn hàng");
+            }
+         } catch (error) {
+            console.error("Lỗi khi tải danh sách đơn hàng:", error);
+            setError("Lỗi khi tải danh sách đơn hàng: " + (error.response?.data?.message || error.message));
+         } finally {
+            setLoading(false);
+         }
+      };
 
-         return matchesSearch && matchesStatus && matchesPriority
-      })
+      fetchOrders();
+   }, [statusFilter]);
 
-      const formatPrice = (price) => {
-         return new Intl.NumberFormat("vi-VN", {
-            style: "currency",
-            currency: "VND",
-         }).format(price)
+   // Xem chi tiết đơn hàng
+   const handleViewDetail = async (orderId) => {
+      try {
+         setLoading(true);
+         const response = await orderService.getOrderDetail(orderId);
+         if (response.data?.success) {
+            setSelectedOrder(response.data.data);
+            setDetailModalVisible(true);
+
+            // Load feedback cho đơn hàng này nếu có
+            await loadOrderFeedbacks(orderId);
+         } else {
+            message.error("Không thể tải chi tiết đơn hàng");
+         }
+      } catch (error) {
+         console.error("Lỗi khi tải chi tiết đơn hàng:", error);
+         message.error("Lỗi khi tải chi tiết đơn hàng");
+      } finally {
+         setLoading(false);
       }
+   };
 
-      const formatTime = (dateString) => {
-         return new Date(dateString).toLocaleTimeString("vi-VN", {
-            hour: "2-digit",
-            minute: "2-digit",
-         })
+   // Load feedback của đơn hàng
+   const loadOrderFeedbacks = async (orderId) => {
+      setFeedbackLoading(true);
+      try {
+         const response = await feedbackService.getOrderFeedbacks(orderId);
+         if (response.data?.success) {
+            setFeedbacks(response.data.data);
+            setFeedbackStats(response.data.stats);
+         }
+      } catch (error) {
+         console.error("Lỗi khi tải feedback:", error);
+      } finally {
+         setFeedbackLoading(false);
       }
+   };
 
-      const getStatusIcon = (status) => statusConfig[status]?.icon || <ClockCircleOutlined />
+   // Mở modal đánh giá
+   const handleOpenFeedback = (order) => {
+      setSelectedOrderForFeedback(order);
+      setFeedbackModalVisible(true);
+   };
+
+   // Mở modal báo cáo
+   const handleOpenReport = (order) => {
+      const driver = order.items?.find(item => item.status === 'Delivered' && item.driverId)?.driverId;
+      if (driver) {
+         setSelectedDriverForReport(driver);
+         setReportModalVisible(true);
+      }
+   };
+
+   // Lọc đơn hàng theo từ khóa tìm kiếm
+   const filteredOrders = orders.filter((order) => {
+      const matchesSearch =
+         order._id?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+         order.pickupAddress?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+         order.dropoffAddress?.toLowerCase().includes(searchTerm.toLowerCase());
+
+      return matchesSearch;
+   });
+
+   // Hiển thị trạng thái đơn hàng
+   const renderOrderStatus = (status) => {
+      const config = statusConfig[status] || { label: status, color: "default", icon: <ClockCircleOutlined /> };
+      return (
+         <Tag color={config.color}>
+            {config.icon}
+            <span style={{ marginLeft: 6 }}>{config.label}</span>
+         </Tag>
+      );
+   };
+
+   // Hiển thị các bước đơn hàng
+   const renderOrderSteps = (item) => {
+      const { status } = item;
+      let current = 0;
+
+      switch (status) {
+         case "Accepted":
+            current = 0;
+            break;
+         case "PickedUp":
+            current = 1;
+            break;
+         case "Delivering":
+            current = 2;
+            break;
+         case "Delivered":
+            current = 3;
+            break;
+         default:
+            current = 0;
+      }
 
       return (
-         <div>
-            <div className="px-4 py-4">
-               <Row gutter={[16, 16]}>
-                  <Col xs={24} md={6}>
-                     <Card>
-                        <Statistic title="Đang chờ tài xế" value={ordersData.filter(o => o.status === 'waiting_driver').length} prefix={<ClockCircleOutlined />} valueStyle={{ color: '#d97706' }} />
-                     </Card>
-                  </Col>
-                  <Col xs={24} md={6}>
-                     <Card>
-                        <Statistic title="Đang thực hiện" value={ordersData.filter(o => ['driver_assigned', 'picked_up', 'in_transit'].includes(o.status)).length} prefix={<TruckOutlined />} valueStyle={{ color: '#1d4ed8' }} />
-                     </Card>
-                  </Col>
-                  <Col xs={24} md={6}>
-                     <Card>
-                        <Statistic title="Hoàn thành" value={ordersData.filter(o => o.status === 'delivered').length} prefix={<InboxOutlined />} valueStyle={{ color: '#16a34a' }} />
-                     </Card>
-                  </Col>
-                  <Col xs={24} md={6}>
-                     <Card>
-                        <Statistic title="Tổng doanh thu" value={ordersData.reduce((s, o) => s + o.totalPrice, 0)} precision={0} prefix={<StarFilled />} valueStyle={{ color: '#7c3aed' }} formatter={(v) => new Intl.NumberFormat('vi-VN').format(Number(v)) + " đ"} />
-                     </Card>
-                  </Col>
-               </Row>
+         <Steps size="small" current={current} className="mt-4">
+            <Step title="Đã nhận đơn" description={item.acceptedAt ? formatDate(item.acceptedAt, true) : ""} />
+            <Step title="Đã lấy hàng" description={item.pickedUpAt ? formatDate(item.pickedUpAt, true) : ""} />
+            <Step title="Đang giao" />
+            <Step title="Đã giao hàng" description={item.deliveredAt ? formatDate(item.deliveredAt, true) : ""} />
+         </Steps>
+      );
+   };
+
+   // Tính số lượng đơn hàng theo trạng thái
+   const countOrdersByStatus = (status) => {
+      return orders.reduce((count, order) => {
+         const hasItemWithStatus = order.items.some(item => item.status === status);
+         return hasItemWithStatus ? count + 1 : count;
+      }, 0);
+   };
+
+   // Tính tổng doanh thu từ các đơn hàng đã giao
+   const calculateTotalRevenue = () => {
+      return orders.reduce((total, order) => {
+         // Chỉ tính các đơn hàng có ít nhất một mục đã giao
+         const hasDeliveredItems = order.items.some(item => item.status === "Delivered");
+         if (hasDeliveredItems) {
+            return total + order.totalPrice;
+         }
+         return total;
+      }, 0);
+   };
+
+   return (
+      <div className="space-y-6">
+         {/* Header */}
+         <div className="bg-gradient-to-r from-blue-500 to-blue-600 p-6 rounded-lg text-white">
+            <div className="flex items-center justify-between">
+               <div>
+                  <h1 className="text-3xl font-bold mb-2">Đơn hàng của tôi</h1>
+                  <p className="text-blue-100">Theo dõi và quản lý các đơn hàng của bạn</p>
+               </div>
+               <div className="text-right">
+                  <div className="text-4xl font-bold">{orders.length}</div>
+                  <p className="text-blue-100">Tổng đơn hàng</p>
+               </div>
             </div>
+         </div>
 
-            <Card className="mx-4 mb-4">
-               <Row gutter={[12, 12]}>
-                  <Col xs={24} md={8}>
-                     <Input placeholder="Tìm kiếm đơn hàng..." prefix={<SearchOutlined />} value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} allowClear />
-                  </Col>
-                  <Col xs={24} md={8}>
-                     <Select value={statusFilter} onChange={setStatusFilter} style={{ width: '100%' }} placeholder="Trạng thái">
-                        <Select.Option value="all">Tất cả trạng thái</Select.Option>
-                        <Select.Option value="waiting_driver">Đang tìm tài xế</Select.Option>
-                        <Select.Option value="driver_assigned">Đã có tài xế</Select.Option>
-                        <Select.Option value="picked_up">Đã lấy hàng</Select.Option>
-                        <Select.Option value="in_transit">Đang giao</Select.Option>
-                        <Select.Option value="delivered">Đã giao</Select.Option>
-                        <Select.Option value="cancelled">Đã hủy</Select.Option>
-                     </Select>
-                  </Col>
-                  <Col xs={24} md={6}>
-                     <Select value={priorityFilter} onChange={setPriorityFilter} style={{ width: '100%' }} placeholder="Độ ưu tiên">
-                        <Select.Option value="all">Tất cả mức độ</Select.Option>
-                        <Select.Option value="normal">Bình thường</Select.Option>
-                        <Select.Option value="high">Cao</Select.Option>
-                        <Select.Option value="urgent">Khẩn cấp</Select.Option>
-                     </Select>
-                  </Col>
-                  <Col xs={24} md={2}>
-                     <Button type="primary" icon={<FilterOutlined />} block>
-                        Lọc ({filteredOrders.length})
-                     </Button>
-                  </Col>
-               </Row>
-            </Card>
+         {/* Stats Cards */}
+         <Row gutter={[16, 16]}>
+            <Col xs={24} sm={6}>
+               <Card className="text-center hover:shadow-lg transition-shadow">
+                  <Statistic
+                     title="Đang chờ tài xế"
+                     value={countOrdersByStatus("Created")}
+                     prefix={<ClockCircleOutlined />}
+                     valueStyle={{ color: "#d97706" }}
+                  />
+               </Card>
+            </Col>
+            <Col xs={24} sm={6}>
+               <Card className="text-center hover:shadow-lg transition-shadow">
+                  <Statistic
+                     title="Đang thực hiện"
+                     value={countOrdersByStatus("Accepted") + countOrdersByStatus("PickedUp") + countOrdersByStatus("Delivering")}
+                     prefix={<TruckOutlined />}
+                     valueStyle={{ color: "#1d4ed8" }}
+                  />
+               </Card>
+            </Col>
+            <Col xs={24} sm={6}>
+               <Card className="text-center hover:shadow-lg transition-shadow">
+                  <Statistic
+                     title="Hoàn thành"
+                     value={countOrdersByStatus("Delivered")}
+                     prefix={<CheckCircleOutlined />}
+                     valueStyle={{ color: "#16a34a" }}
+                  />
+               </Card>
+            </Col>
+            <Col xs={24} sm={6}>
+               <Card className="text-center hover:shadow-lg transition-shadow">
+                  <Statistic
+                     title="Tổng chi phí"
+                     value={calculateTotalRevenue()}
+                     precision={0}
+                     prefix={<StarFilled />}
+                     valueStyle={{ color: "#7c3aed" }}
+                     formatter={(v) => formatCurrency(v)}
+                  />
+               </Card>
+            </Col>
+         </Row>
 
-            <Space direction="vertical" size={16} className="w-full px-4 pb-6">
-               {filteredOrders.map((order) => (
-                  <Card key={order.id} title={`#${order.id}`} extra={<Space size={8}><span>{new Date(order.createdAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}</span><Button size="small" icon={<EyeOutlined />}>Chi tiết</Button></Space>}>
-                     <Row gutter={[16, 16]}>
-                        <Col xs={24} lg={8}>
-                           <Space direction="vertical" size={12} className="w-full">
-                              <div>
-                                 <div className="font-semibold mb-1">Thông tin khách hàng</div>
-                                 <Space direction="vertical" size={6}>
-                                    <Space size={6}><UserOutlined />{order.customerName}</Space>
-                                    <Space size={6}><PhoneOutlined />{order.customerPhone}</Space>
-                                 </Space>
-                              </div>
-                              <div>
-                                 <div className="font-semibold mb-1">Chi tiết đơn hàng</div>
-                                 <Space direction="vertical" size={6} className="w-full">
-                                    <Space className="w-full" style={{ justifyContent: 'space-between' }}><span>Loại xe:</span><span>{order.vehicleType}</span></Space>
-                                    <Space className="w-full" style={{ justifyContent: 'space-between' }}><span>Khối lượng:</span><span>{order.weight}</span></Space>
-                                    <Space className="w-full" style={{ justifyContent: 'space-between' }}><span>Khoảng cách:</span><span>{order.distance}</span></Space>
-                                    <Space className="w-full" style={{ justifyContent: 'space-between' }}><span>Thời gian dự kiến:</span><span>{order.estimatedTime}</span></Space>
-                                    <Space className="w-full" style={{ justifyContent: 'space-between' }}><span className="font-semibold">Tổng tiền:</span><span className="text-blue-600">{new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(order.totalPrice)}</span></Space>
-                                 </Space>
-                              </div>
-                              <Space wrap>
-                                 {order.hasInsurance ? <Tag color="green">Có bảo hiểm</Tag> : null}
-                                 {order.requiresLoading ? <Tag color="blue">Bốc hàng tận nơi</Tag> : null}
-                                 <Tag color={statusConfig[order.status]?.color}>{statusConfig[order.status]?.icon}<span style={{ marginLeft: 6 }}>{statusConfig[order.status]?.label}</span></Tag>
-                                 <Tag color={priorityConfig[order.priority]?.color}>{priorityConfig[order.priority]?.label}</Tag>
-                              </Space>
-                           </Space>
-                        </Col>
-                        <Col xs={24} lg={8}>
-                           <Space direction="vertical" size={12} className="w-full">
-                              <div>
-                                 <div className="font-semibold mb-1">Địa chỉ</div>
-                                 <Space direction="vertical" size={6}>
-                                    <Space align="start"><EnvironmentOutlined style={{ color: '#16a34a' }} /> <span>{order.pickupAddress}</span></Space>
-                                    <Space align="start"><EnvironmentOutlined style={{ color: '#ef4444' }} /> <span>{order.deliveryAddress}</span></Space>
-                                 </Space>
-                              </div>
-                              <div>
-                                 <img src={order.orderImage || "/imgs/logonen.png"} alt="Hình ảnh đơn hàng" style={{ width: '100%', height: 96, objectFit: 'cover', borderRadius: 8 }} />
-                                 <div className="text-xs text-gray-500 mt-2">Hình ảnh đơn hàng</div>
-                              </div>
-                           </Space>
-                        </Col>
-                        <Col xs={24} lg={8}>
-                           <div className="font-semibold mb-2">Thông tin tài xế</div>
-                           {order.driver ? (
-                              <Space direction="vertical" size={12} className="w-full">
-                                 <Space size={12}>
-                                    <Avatar src={order.driver.avatar} icon={<UserOutlined />} />
-                                    <div>
-                                       <div className="font-medium">{order.driver.name}</div>
-                                       <Space size={6}>
-                                          <StarFilled style={{ color: '#f59e0b' }} />
-                                          <span className="text-sm text-gray-500">{order.driver.rating}</span>
-                                       </Space>
+         <Card className="shadow-sm">
+            <Row gutter={[16, 16]}>
+               <Col xs={24} md={8}>
+                  <Input
+                     placeholder="Tìm kiếm đơn hàng..."
+                     prefix={<SearchOutlined />}
+                     value={searchTerm}
+                     onChange={(e) => setSearchTerm(e.target.value)}
+                     allowClear
+                     size="large"
+                  />
+               </Col>
+               <Col xs={24} md={8}>
+                  <Select
+                     value={statusFilter}
+                     onChange={setStatusFilter}
+                     style={{ width: "100%" }}
+                     placeholder="Trạng thái"
+                     size="large"
+                  >
+                     <Select.Option value="all">Tất cả trạng thái</Select.Option>
+                     <Select.Option value="Created">Đang tìm tài xế</Select.Option>
+                     <Select.Option value="Accepted">Đã có tài xế</Select.Option>
+                     <Select.Option value="PickedUp">Đã lấy hàng</Select.Option>
+                     <Select.Option value="Delivering">Đang giao</Select.Option>
+                     <Select.Option value="Delivered">Đã giao</Select.Option>
+                     <Select.Option value="Cancelled">Đã hủy</Select.Option>
+                  </Select>
+               </Col>
+               <Col xs={24} md={8}>
+                  <Button type="primary" icon={<FilterOutlined />} size="large" block>
+                     Lọc ({filteredOrders.length})
+                  </Button>
+               </Col>
+            </Row>
+         </Card>
+
+         {error && (
+            <Alert
+               message="Lỗi"
+               description={error}
+               type="error"
+               showIcon
+               className="mx-4 mb-4"
+            />
+         )}
+
+         {loading ? (
+            <div className="flex justify-center py-10">
+               <Spin size="large" tip="Đang tải đơn hàng..." />
+            </div>
+         ) : (
+            <div className="space-y-4">
+               {filteredOrders.length > 0 ? (
+                  filteredOrders.map((order) => {
+                     const hasDeliveredItems = order.items.some(item => item.status === 'Delivered');
+                     const hasDriver = order.items.some(item => item.status === 'Delivered' && item.driverId);
+
+                     return (
+                        <Card
+                           key={order._id}
+                           className={`shadow-lg hover:shadow-xl transition-shadow ${hasDeliveredItems ? 'border-l-4 border-l-green-500' :
+                              order.items.some(item => ['Accepted', 'PickedUp', 'Delivering'].includes(item.status)) ? 'border-l-4 border-l-blue-500' :
+                                 'border-l-4 border-l-gray-300'
+                              }`}
+                        >
+                           <div className="space-y-4">
+                              {/* Header */}
+                              <div className="flex items-center justify-between">
+                                 <div className="flex items-center space-x-3">
+                                    <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
+                                       <span className="text-lg font-bold text-blue-600">#{order._id.substring(0, 8)}</span>
                                     </div>
-                                 </Space>
-                                 <Space direction="vertical" size={6}>
-                                    <Space size={8}><PhoneOutlined />{order.driver.phone}</Space>
-                                    <Space size={8}><TruckOutlined />{order.driver.vehicleNumber}</Space>
-                                 </Space>
-                                 <Space>
-                                    <Button icon={<PhoneOutlined />}>Gọi</Button>
-                                    <Button icon={<MessageOutlined />}>Chat</Button>
-                                 </Space>
-                              </Space>
-                           ) : (
-                              <div style={{ textAlign: 'center', padding: '24px 0', color: '#6b7280' }}>
-                                 <ClockCircleOutlined style={{ fontSize: 24 }} />
-                                 <div>Đang tìm tài xế phù hợp</div>
-                                 <div style={{ fontSize: 12 }}>Thời gian chờ dự kiến: 5-10 phút</div>
+                                    <div>
+                                       <h3 className="font-semibold text-lg">Đơn hàng #{order._id.substring(0, 8)}</h3>
+                                       <p className="text-sm text-gray-500">{formatDate(order.createdAt, true)}</p>
+                                    </div>
+                                 </div>
+                                 <div className="text-right">
+                                    <div className="text-2xl font-bold text-green-600">
+                                       {formatCurrency(order.totalPrice)}
+                                    </div>
+                                    <div className="flex items-center space-x-2">
+                                       <Button size="small" icon={<EyeOutlined />} onClick={() => handleViewDetail(order._id)}>
+                                          Chi tiết
+                                       </Button>
+                                       {/* Nút đánh giá cho đơn đã hoàn thành */}
+                                       {hasDeliveredItems && (
+                                          <Button
+                                             size="small"
+                                             type="primary"
+                                             icon={<StarOutlined />}
+                                             onClick={() => handleOpenFeedback(order)}
+                                             className="bg-yellow-500 hover:bg-yellow-600 border-yellow-500"
+                                          >
+                                             Đánh giá
+                                          </Button>
+                                       )}
+                                       {/* Nút báo cáo cho đơn đã hoàn thành */}
+                                       {hasDriver && (
+                                          <Button
+                                             size="small"
+                                             danger
+                                             icon={<WarningOutlined />}
+                                             onClick={() => handleOpenReport(order)}
+                                          >
+                                             Báo cáo
+                                          </Button>
+                                       )}
+                                    </div>
+                                 </div>
                               </div>
-                           )}
-                        </Col>
-                     </Row>
-                  </Card>
-               ))}
-               {filteredOrders.length === 0 ? (
+
+                              {/* Address */}
+                              <div className="bg-gray-50 p-4 rounded-lg">
+                                 <Row gutter={[16, 8]}>
+                                    <Col span={12}>
+                                       <div className="flex items-start">
+                                          <EnvironmentOutlined className="text-green-500 mr-2 mt-1" />
+                                          <div>
+                                             <p className="font-medium text-green-700">Điểm lấy hàng</p>
+                                             <p className="text-sm">{order.pickupAddress}</p>
+                                          </div>
+                                       </div>
+                                    </Col>
+                                    <Col span={12}>
+                                       <div className="flex items-start">
+                                          <EnvironmentOutlined className="text-red-500 mr-2 mt-1" />
+                                          <div>
+                                             <p className="font-medium text-red-700">Điểm giao hàng</p>
+                                             <p className="text-sm">{order.dropoffAddress}</p>
+                                          </div>
+                                       </div>
+                                    </Col>
+                                 </Row>
+                              </div>
+
+                              {/* Items */}
+                              <div className="space-y-3">
+                                 {order.items.map((item, index) => (
+                                    <div key={index} className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                                       <Row gutter={[16, 8]} align="middle">
+                                          <Col xs={24} sm={16}>
+                                             <div className="space-y-2">
+                                                <div className="flex items-center space-x-2">
+                                                   <TruckOutlined className="text-blue-500" />
+                                                   <span className="font-semibold text-lg">{item.vehicleType}</span>
+                                                   {renderOrderStatus(item.status)}
+                                                </div>
+                                                <div className="flex items-center space-x-4 text-sm text-gray-600">
+                                                   <span>📦 {item.weightKg.toLocaleString()} kg</span>
+                                                   <span>📏 {item.distanceKm} km</span>
+                                                   <span>💰 {formatCurrency(item.priceBreakdown?.total || 0)}</span>
+                                                </div>
+                                                <div className="flex items-center space-x-2">
+                                                   {item.loadingService && <Tag color="orange">Bốc xếp</Tag>}
+                                                   {item.insurance && <Tag color="blue">Bảo hiểm</Tag>}
+                                                </div>
+                                             </div>
+                                          </Col>
+                                          <Col xs={24} sm={8}>
+                                             <div className="text-right">
+                                                <div className="text-xl font-bold text-blue-600">
+                                                   {formatCurrency(item.priceBreakdown?.total || 0)}
+                                                </div>
+                                                <p className="text-sm text-gray-500">Chi phí vận chuyển</p>
+                                             </div>
+                                          </Col>
+                                       </Row>
+                                    </div>
+                                 ))}
+                              </div>
+
+                              {/* Driver Info */}
+                              {order.items.some(item => item.driverId) ? (
+                                 <div className="bg-gray-50 p-4 rounded-lg">
+                                    <h4 className="font-medium mb-3">Thông tin tài xế</h4>
+                                    {order.items.map((item, index) => {
+                                       if (!item.driverId) return null;
+                                       const driver = item.driverId;
+                                       return (
+                                          <Row key={index} gutter={[16, 16]} align="middle">
+                                             <Col xs={24} sm={12}>
+                                                <div className="flex items-center space-x-3">
+                                                   <Avatar src={driver.avatarUrl} icon={<UserOutlined />} size="large" />
+                                                   <div>
+                                                      <div className="font-semibold text-lg">{driver.userId?.name || "Tài xế"}</div>
+                                                      <div className="flex items-center space-x-2">
+                                                         <StarFilled className="text-yellow-500" />
+                                                         <span className="font-medium">{driver.rating || "N/A"}</span>
+                                                         <span className="text-sm text-gray-500">({driver.totalTrips || 0} chuyến)</span>
+                                                      </div>
+                                                   </div>
+                                                </div>
+                                             </Col>
+                                             <Col xs={24} sm={12}>
+                                                <div className="space-y-2">
+                                                   <div className="flex items-center space-x-2">
+                                                      <PhoneOutlined className="text-blue-500" />
+                                                      <span>{driver.userId?.phone || "N/A"}</span>
+                                                   </div>
+                                                   <div className="flex items-center space-x-2">
+                                                      <TruckOutlined className="text-green-500" />
+                                                      <span>{item.vehicleType}</span>
+                                                   </div>
+                                                </div>
+                                             </Col>
+                                          </Row>
+                                       );
+                                    })}
+                                 </div>
+                              ) : (
+                                 <div className="bg-gray-50 p-4 rounded-lg text-center">
+                                    <ClockCircleOutlined className="text-4xl text-gray-400 mb-2" />
+                                    <div className="text-lg font-medium text-gray-600">Đang tìm tài xế phù hợp</div>
+                                    <div className="text-sm text-gray-500">Thời gian chờ dự kiến: 5-10 phút</div>
+                                 </div>
+                              )}
+                           </div>
+                        </Card>
+                     );
+                  })
+               ) : (
                   <Card className="w-full text-center">
                      <Space direction="vertical" size={8}>
-                        <InboxOutlined style={{ fontSize: 48, color: '#9ca3af' }} />
+                        <InboxOutlined style={{ fontSize: 48, color: "#9ca3af" }} />
                         <div className="text-lg font-semibold">Không tìm thấy đơn hàng</div>
                         <div className="text-gray-500">Thử thay đổi bộ lọc hoặc từ khóa tìm kiếm</div>
                      </Space>
                   </Card>
-               ) : null}
-            </Space>
-         </div>
-      )
-   }
+               )}
+            </div>
+         )}
+
+         {/* Modal chi tiết đơn hàng */}
+         <Modal
+            title={
+               <div className="flex items-center space-x-2">
+                  <EyeOutlined className="text-blue-500" />
+                  <span>Chi tiết đơn hàng</span>
+               </div>
+            }
+            open={detailModalVisible}
+            onCancel={() => setDetailModalVisible(false)}
+            footer={null}
+            width={900}
+            className="order-detail-modal"
+         >
+            {selectedOrder && (
+               <div className="space-y-6">
+                  {/* Thông tin đơn hàng */}
+                  <Card title="Thông tin đơn hàng" className="shadow-sm">
+                     <Row gutter={[16, 16]}>
+                        <Col xs={24} sm={12}>
+                           <div className="space-y-2">
+                              <div className="flex items-center space-x-2">
+                                 <UserOutlined className="text-blue-500" />
+                                 <span className="font-medium">Mã đơn hàng</span>
+                              </div>
+                              <p className="text-lg font-semibold">#{selectedOrder._id?.slice(-8)}</p>
+                              <p className="text-sm text-gray-500">{formatDate(selectedOrder.createdAt, true)}</p>
+                           </div>
+                        </Col>
+                        <Col xs={24} sm={12}>
+                           <div className="space-y-2">
+                              <div className="flex items-center space-x-2">
+                                 <StarFilled className="text-green-500" />
+                                 <span className="font-medium">Tổng giá trị</span>
+                              </div>
+                              <p className="text-2xl font-bold text-green-600">{formatCurrency(selectedOrder.totalPrice)}</p>
+                           </div>
+                        </Col>
+                     </Row>
+                  </Card>
+
+                  {/* Địa chỉ */}
+                  <Card title="Địa chỉ giao hàng" className="shadow-sm">
+                     <Row gutter={[16, 16]}>
+                        <Col xs={24} sm={12}>
+                           <div className="bg-green-50 p-4 rounded-lg border border-green-200">
+                              <div className="flex items-center space-x-2 mb-2">
+                                 <EnvironmentOutlined className="text-green-500" />
+                                 <span className="font-medium text-green-700">Điểm lấy hàng</span>
+                              </div>
+                              <p className="text-sm">{selectedOrder.pickupAddress}</p>
+                           </div>
+                        </Col>
+                        <Col xs={24} sm={12}>
+                           <div className="bg-red-50 p-4 rounded-lg border border-red-200">
+                              <div className="flex items-center space-x-2 mb-2">
+                                 <EnvironmentOutlined className="text-red-500" />
+                                 <span className="font-medium text-red-700">Điểm giao hàng</span>
+                              </div>
+                              <p className="text-sm">{selectedOrder.dropoffAddress}</p>
+                           </div>
+                        </Col>
+                     </Row>
+                     {selectedOrder.customerNote && (
+                        <div className="mt-4 p-3 bg-blue-50 rounded-lg">
+                           <div className="font-medium text-blue-700 mb-1">Ghi chú:</div>
+                           <p className="text-sm text-blue-600">{selectedOrder.customerNote}</p>
+                        </div>
+                     )}
+                  </Card>
+
+                  {/* Chi tiết vận chuyển */}
+                  <Card title="Chi tiết vận chuyển" className="shadow-sm">
+                     {selectedOrder.items.map((item, index) => (
+                        <div key={index} className="space-y-4">
+                           <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                              <Row gutter={[16, 16]} align="middle">
+                                 <Col xs={24} sm={16}>
+                                    <div className="space-y-2">
+                                       <div className="flex items-center space-x-2">
+                                          <TruckOutlined className="text-blue-500" />
+                                          <span className="font-semibold text-lg">{item.vehicleType}</span>
+                                          {renderOrderStatus(item.status)}
+                                       </div>
+                                       <div className="flex items-center space-x-4 text-sm text-gray-600">
+                                          <span>📦 {item.weightKg.toLocaleString()} kg</span>
+                                          <span>📏 {item.distanceKm} km</span>
+                                          <span>💰 {formatCurrency(item.priceBreakdown?.total || 0)}</span>
+                                       </div>
+                                       <div className="flex items-center space-x-2">
+                                          {item.loadingService && <Tag color="orange">Bốc xếp</Tag>}
+                                          {item.insurance && <Tag color="blue">Bảo hiểm</Tag>}
+                                       </div>
+                                    </div>
+                                 </Col>
+                                 <Col xs={24} sm={8}>
+                                    <div className="text-right">
+                                       <div className="text-2xl font-bold text-blue-600">
+                                          {formatCurrency(item.priceBreakdown?.total || 0)}
+                                       </div>
+                                       <p className="text-sm text-gray-500">Chi phí vận chuyển</p>
+                                    </div>
+                                 </Col>
+                              </Row>
+                           </div>
+
+                           {/* Progress Steps */}
+                           {item.driverId && renderOrderSteps(item)}
+
+                           {/* Thông tin tài xế */}
+                           {item.driverId && (
+                              <div className="bg-gray-50 p-4 rounded-lg">
+                                 <h4 className="font-medium mb-3">Thông tin tài xế</h4>
+                                 <Row gutter={[16, 16]} align="middle">
+                                    <Col xs={24} sm={12}>
+                                       <div className="flex items-center space-x-3">
+                                          <Avatar src={item.driverId.avatarUrl} icon={<UserOutlined />} size="large" />
+                                          <div>
+                                             <div className="font-semibold text-lg">{item.driverId.userId?.name || "Tài xế"}</div>
+                                             <div className="flex items-center space-x-2">
+                                                <StarFilled className="text-yellow-500" />
+                                                <span className="font-medium">{item.driverId.rating || "N/A"}</span>
+                                                <span className="text-sm text-gray-500">({item.driverId.totalTrips || 0} chuyến)</span>
+                                             </div>
+                                          </div>
+                                       </div>
+                                    </Col>
+                                    <Col xs={24} sm={12}>
+                                       <div className="space-y-2">
+                                          <div className="flex items-center space-x-2">
+                                             <PhoneOutlined className="text-blue-500" />
+                                             <span>{item.driverId.userId?.phone || "N/A"}</span>
+                                          </div>
+                                          <div className="flex items-center space-x-2">
+                                             <TruckOutlined className="text-green-500" />
+                                             <span>{item.vehicleType}</span>
+                                          </div>
+                                       </div>
+                                    </Col>
+                                 </Row>
+                              </div>
+                           )}
+
+                           {/* Chi phí chi tiết */}
+                           <div className="bg-gray-50 p-4 rounded-lg">
+                              <h4 className="font-medium mb-3">Chi phí chi tiết</h4>
+                              <div className="space-y-2">
+                                 <div className="flex justify-between">
+                                    <span>Cước phí ({formatCurrency(item.priceBreakdown?.basePerKm || 0)}/km × {item.distanceKm}km):</span>
+                                    <span className="font-medium">{formatCurrency(item.priceBreakdown?.distanceCost || 0)}</span>
+                                 </div>
+                                 {item.loadingService && (
+                                    <div className="flex justify-between">
+                                       <span>Phí bốc xếp:</span>
+                                       <span className="font-medium">{formatCurrency(item.priceBreakdown?.loadCost || 0)}</span>
+                                    </div>
+                                 )}
+                                 {item.insurance && (
+                                    <div className="flex justify-between">
+                                       <span>Phí bảo hiểm:</span>
+                                       <span className="font-medium">{formatCurrency(item.priceBreakdown?.insuranceFee || 0)}</span>
+                                    </div>
+                                 )}
+                                 <Divider />
+                                 <div className="flex justify-between font-bold text-lg">
+                                    <span>Tổng cộng:</span>
+                                    <span className="text-blue-600">{formatCurrency(item.priceBreakdown?.total || 0)}</span>
+                                 </div>
+                              </div>
+                           </div>
+
+                           {/* Action buttons cho đơn đã hoàn thành */}
+                           {item.status === 'Delivered' && item.driverId && (
+                              <div className="flex justify-center space-x-4">
+                                 <Button
+                                    type="primary"
+                                    size="large"
+                                    icon={<StarOutlined />}
+                                    onClick={() => {
+                                       setDetailModalVisible(false);
+                                       handleOpenFeedback(selectedOrder);
+                                    }}
+                                    className="bg-yellow-500 hover:bg-yellow-600 border-yellow-500"
+                                 >
+                                    Đánh giá dịch vụ
+                                 </Button>
+                                 <Button
+                                    danger
+                                    size="large"
+                                    icon={<WarningOutlined />}
+                                    onClick={() => {
+                                       setDetailModalVisible(false);
+                                       handleOpenReport(selectedOrder);
+                                    }}
+                                 >
+                                    Báo cáo tài xế
+                                 </Button>
+                              </div>
+                           )}
+                        </div>
+                     ))}
+                  </Card>
+
+                  {/* Feedback Section */}
+                  {feedbacks.length > 0 && (
+                     <Card title="Đánh giá dịch vụ" className="shadow-sm">
+                        <FeedbackDisplay
+                           feedbacks={feedbacks}
+                           stats={feedbackStats}
+                           showStats={true}
+                           loading={feedbackLoading}
+                        />
+                     </Card>
+                  )}
+               </div>
+            )}
+         </Modal>
+
+         {/* Modal đánh giá */}
+         <FeedbackModal
+            open={feedbackModalVisible}
+            onClose={() => setFeedbackModalVisible(false)}
+            order={selectedOrderForFeedback}
+            onSuccess={() => {
+               message.success('Đánh giá đã được gửi thành công!');
+               setFeedbackModalVisible(false);
+               // Reload feedback nếu đang xem chi tiết
+               if (selectedOrder) {
+                  loadOrderFeedbacks(selectedOrder._id);
+               }
+            }}
+         />
+
+         {/* Modal báo cáo */}
+         <ReportViolationModal
+            open={reportModalVisible}
+            onClose={() => setReportModalVisible(false)}
+            driver={selectedDriverForReport}
+            order={selectedOrderForFeedback}
+            onSuccess={() => {
+               message.success('Báo cáo vi phạm đã được gửi thành công!');
+               setReportModalVisible(false);
+            }}
+         />
+      </div>
+   );
+}
