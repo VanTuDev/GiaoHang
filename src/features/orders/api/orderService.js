@@ -25,4 +25,10 @@ export const orderService = {
 
    // Driver: Cập nhật trạng thái đơn hàng
    updateItemStatus: (orderId, itemId, status) => axiosClient.put(ORDER_ENDPOINTS.updateItemStatus(orderId, itemId), { status }),
+
+   // Customer: Huỷ đơn hàng
+   cancelOrder: (orderId, reason) => axiosClient.put(ORDER_ENDPOINTS.cancelOrder(orderId), { reason }),
+
+   // Customer: Cập nhật bảo hiểm đơn hàng
+   updateOrderInsurance: (orderId, itemId, insurance) => axiosClient.put(ORDER_ENDPOINTS.updateOrderInsurance(orderId), { itemId, insurance }),
 };

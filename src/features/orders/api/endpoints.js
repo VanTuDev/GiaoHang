@@ -3,6 +3,8 @@ export const ORDER_ENDPOINTS = {
    createOrder: "/api/orders",
    myOrders: "/api/orders/my-orders",
    orderDetail: (id) => `/api/orders/${id}`,
+   cancelOrder: (orderId) => `/api/orders/${orderId}/cancel`,
+   updateOrderInsurance: (orderId) => `/api/orders/${orderId}/insurance`,
 
    // Driver
    driverOnline: "/api/orders/driver/online",
