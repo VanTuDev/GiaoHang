@@ -6,6 +6,9 @@ export const FEEDBACK_ENDPOINTS = {
    // Public
    driverFeedbacks: (driverId) => `/api/feedback/driver/${driverId}`,
 
+   // Lấy đánh giá của đơn hàng
+   orderFeedbacks: (orderId) => `/api/feedback/order/${orderId}`,
+
    // Admin
    adminAllFeedbacks: "/api/feedback/admin/all",
    adminUpdateStatus: (feedbackId) => `/api/feedback/admin/${feedbackId}/status`,

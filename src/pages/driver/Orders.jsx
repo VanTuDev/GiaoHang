@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
    Tabs,
    Card,
@@ -39,6 +39,7 @@ import { feedbackService } from '../../features/feedback/api/feedbackService';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import FeedbackDisplay from '../user/components/FeedbackDisplay';
 import ReportViolationModal from '../user/components/ReportViolationModal';
+import { io } from 'socket.io-client';
 
 const { TabPane } = Tabs;
 const { Step } = Steps;
@@ -49,10 +50,13 @@ export default function DriverOrders() {
    const [error, setError] = useState(null);
    const [orders, setOrders] = useState([]);
    const [availableOrders, setAvailableOrders] = useState([]);
+   const [counts, setCounts] = useState({ active: 0, available: 0, completed: 0, cancelled: 0 });
    const [selectedOrder, setSelectedOrder] = useState(null);
    const [detailModalVisible, setDetailModalVisible] = useState(false);
    const [updatingStatus, setUpdatingStatus] = useState(false);
    const [modal, contextHolder] = Modal.useModal();
+   const socketRef = useRef(null);
+   const [socketConnected, setSocketConnected] = useState(false);
 
    // Feedback states
    const [feedbacks, setFeedbacks] = useState([]);
@@ -78,11 +82,14 @@ export default function DriverOrders() {
                }
             } else {
                // Tải danh sách đơn hàng của tài xế
+               // Sử dụng trạng thái để lọc đơn hàng theo tab hiện tại
                const status = activeTab === 'active' ? 'Accepted,PickedUp,Delivering' :
-                  activeTab === 'completed' ? 'Delivered' : 'Cancelled';
+                  activeTab === 'completed' ? 'Delivered' :
+                     activeTab === 'received' ? 'Accepted' : 'Cancelled';
 
                const response = await orderService.getDriverOrders({ status });
                if (response.data?.success) {
+                  console.log('Fetched orders:', response.data.data);
                   setOrders(response.data.data || []);
                } else {
                   setError("Không thể tải danh sách đơn hàng");
@@ -98,6 +105,84 @@ export default function DriverOrders() {
 
       fetchOrders();
    }, [activeTab]);
+
+   // Xác định xem tài xế có thể báo cáo tài xế khác không
+   // Chỉ cho phép báo cáo khi đơn hàng đã hoàn thành
+   const canReportDriver = (status) => {
+      return status === 'Delivered';
+   };
+
+   // Luôn tải số lượng cho các tab (nền)
+   useEffect(() => {
+      const fetchCounts = async () => {
+         try {
+            // Available
+            const availRes = await orderService.getAvailableOrders({ page: 1, limit: 1 });
+            const available = availRes.data?.meta?.total || (availRes.data?.data?.length || 0);
+
+            // Active = Accepted + PickedUp + Delivering (ước lượng theo số đơn, không theo item)
+            const [accRes, pickRes, delivRes] = await Promise.all([
+               orderService.getDriverOrders({ status: 'Accepted', page: 1, limit: 1 }),
+               orderService.getDriverOrders({ status: 'PickedUp', page: 1, limit: 1 }),
+               orderService.getDriverOrders({ status: 'Delivering', page: 1, limit: 1 })
+            ]);
+            const active = (accRes.data?.meta?.total || 0) + (pickRes.data?.meta?.total || 0) + (delivRes.data?.meta?.total || 0);
+
+            // Completed
+            const doneRes = await orderService.getDriverOrders({ status: 'Delivered', page: 1, limit: 1 });
+            const completed = doneRes.data?.meta?.total || 0;
+
+            // Cancelled
+            const cancelRes = await orderService.getDriverOrders({ status: 'Cancelled', page: 1, limit: 1 });
+            const cancelled = cancelRes.data?.meta?.total || 0;
+
+            setCounts({ active, available, completed, cancelled });
+         } catch (e) {
+            // im lặng để không làm phiền UI
+         }
+      };
+
+      fetchCounts();
+   }, []);
+
+   // Kết nối Socket.IO để nhận đơn mới realtime
+   useEffect(() => {
+      // Tránh kết nối nhiều lần
+      if (socketRef.current) return;
+
+      const SOCKET_URL = 'http://localhost:8080';
+      const socket = io(SOCKET_URL, { transports: ['websocket'], withCredentials: false });
+      socketRef.current = socket;
+
+      socket.on('connect', () => {
+         setSocketConnected(true);
+         // Join room cho tài xế
+         socket.emit('driver:join', 'me');
+      });
+
+      socket.on('disconnect', () => {
+         setSocketConnected(false);
+      });
+
+      socket.on('order:available:new', (payload) => {
+         // Thông báo và cập nhật danh sách đơn có sẵn
+         message.info({
+            content: 'Có đơn hàng mới! Vào tab "Đơn có sẵn" để nhận.',
+            duration: 3
+         });
+
+         // Chỉ thêm khung đơn mới tối thiểu (id, địa chỉ, tổng tiền) nếu đang ở tab available thì refetch
+         setAvailableOrders((prev) => prev);
+         // Nếu đang ở tab khác, tăng badge bằng cách kích hoạt refetch khi chuyển tab
+         // Không refetch tức thời để tránh spam API; người dùng chuyển tab sẽ tải mới
+         setCounts((c) => ({ ...c, available: (c.available || 0) + 1 }));
+      });
+
+      return () => {
+         try { socket.disconnect(); } catch { }
+         socketRef.current = null;
+      };
+   }, []);
 
    // Xem chi tiết đơn hàng
    const handleViewDetail = async (orderId) => {
@@ -249,6 +334,9 @@ export default function DriverOrders() {
 
    // Hiển thị danh sách đơn hàng
    const renderOrders = () => {
+      console.log('Rendering orders for tab:', activeTab);
+      console.log('Orders:', orders);
+
       if (loading) {
          return (
             <div className="flex justify-center py-10">
@@ -374,7 +462,8 @@ export default function DriverOrders() {
             <Empty
                image={Empty.PRESENTED_IMAGE_SIMPLE}
                description={`Không có đơn hàng nào ${activeTab === 'active' ? 'đang hoạt động' :
-                  activeTab === 'completed' ? 'đã hoàn thành' : 'đã hủy'
+                  activeTab === 'completed' ? 'đã hoàn thành' :
+                     activeTab === 'received' ? 'đã nhận' : 'đã hủy'
                   }`}
             />
          );
@@ -389,6 +478,8 @@ export default function DriverOrders() {
                      return ['Accepted', 'PickedUp', 'Delivering'].includes(item.status);
                   } else if (activeTab === 'completed') {
                      return item.status === 'Delivered';
+                  } else if (activeTab === 'received') {
+                     return item.status === 'Accepted';
                   } else {
                      return item.status === 'Cancelled';
                   }
@@ -399,12 +490,14 @@ export default function DriverOrders() {
                const getBorderColor = () => {
                   if (activeTab === 'active') return 'border-l-blue-500';
                   if (activeTab === 'completed') return 'border-l-green-500';
+                  if (activeTab === 'received') return 'border-l-yellow-500';
                   return 'border-l-red-500';
                };
 
                const getStatusIcon = () => {
                   if (activeTab === 'active') return <ClockCircleOutlined className="text-blue-500" />;
                   if (activeTab === 'completed') return <CheckCircleOutlined className="text-green-500" />;
+                  if (activeTab === 'received') return <UserOutlined className="text-yellow-500" />;
                   return <ExclamationCircleOutlined className="text-red-500" />;
                };
 
@@ -426,8 +519,10 @@ export default function DriverOrders() {
                               </div>
                               <div className="flex items-center space-x-2">
                                  {getStatusIcon()}
-                                 <Tag color={activeTab === 'active' ? 'blue' : activeTab === 'completed' ? 'green' : 'red'}>
-                                    {activeTab === 'active' ? 'Đang giao' : activeTab === 'completed' ? 'Hoàn thành' : 'Đã hủy'}
+                                 <Tag color={activeTab === 'active' ? 'blue' : activeTab === 'completed' ? 'green' :
+                                    activeTab === 'received' ? 'yellow' : 'red'}>
+                                    {activeTab === 'active' ? 'Đang giao' : activeTab === 'completed' ? 'Hoàn thành' :
+                                       activeTab === 'received' ? 'Đã nhận' : 'Đã hủy'}
                                  </Tag>
                               </div>
                            </div>
@@ -589,7 +684,7 @@ export default function DriverOrders() {
                         <span className="flex items-center space-x-2">
                            <CarOutlined />
                            <span>Đơn đang giao</span>
-                           <Badge count={orders.filter(order => order.items.some(item => ['Accepted', 'PickedUp', 'Delivering'].includes(item.status))).length} />
+                           <Badge count={counts.active} />
                         </span>
                      ),
                      children: renderOrders()
@@ -600,7 +695,18 @@ export default function DriverOrders() {
                         <span className="flex items-center space-x-2">
                            <ClockCircleOutlined />
                            <span>Đơn có sẵn</span>
-                           <Badge count={availableOrders.length} />
+                           <Badge count={counts.available} />
+                        </span>
+                     ),
+                     children: renderOrders()
+                  },
+                  {
+                     key: 'received',
+                     label: (
+                        <span className="flex items-center space-x-2">
+                           <UserOutlined />
+                           <span>Đơn đã nhận</span>
+                           <Badge count={orders.filter(order => order.items.some(item => item.status === 'Accepted')).length} />
                         </span>
                      ),
                      children: renderOrders()
@@ -611,7 +717,7 @@ export default function DriverOrders() {
                         <span className="flex items-center space-x-2">
                            <CheckCircleOutlined />
                            <span>Đã hoàn thành</span>
-                           <Badge count={orders.filter(order => order.items.some(item => item.status === 'Delivered')).length} />
+                           <Badge count={counts.completed} />
                         </span>
                      ),
                      children: renderOrders()
@@ -622,7 +728,7 @@ export default function DriverOrders() {
                         <span className="flex items-center space-x-2">
                            <ExclamationCircleOutlined />
                            <span>Đã hủy</span>
-                           <Badge count={orders.filter(order => order.items.some(item => item.status === 'Cancelled')).length} />
+                           <Badge count={counts.cancelled} />
                         </span>
                      ),
                      children: renderOrders()

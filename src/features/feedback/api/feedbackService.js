@@ -11,6 +11,9 @@ export const feedbackService = {
    // Public: Lấy đánh giá của driver
    getDriverFeedbacks: (driverId, params) => axiosClient.get(FEEDBACK_ENDPOINTS.driverFeedbacks(driverId), { params }),
 
+   // Lấy đánh giá của đơn hàng
+   getOrderFeedbacks: (orderId) => axiosClient.get(FEEDBACK_ENDPOINTS.orderFeedbacks(orderId)),
+
    // Admin: Lấy tất cả đánh giá
    getAllFeedbacks: (params) => axiosClient.get(FEEDBACK_ENDPOINTS.adminAllFeedbacks, { params }),
 

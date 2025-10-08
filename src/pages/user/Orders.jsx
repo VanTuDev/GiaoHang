@@ -44,6 +44,7 @@ import { formatCurrency, formatDate } from "../../utils/formatters";
 import FeedbackModal from "./components/FeedbackModal";
 import ReportViolationModal from "./components/ReportViolationModal";
 import FeedbackDisplay from "./components/FeedbackDisplay";
+import OrderDetailModal from './OrderDetailModal';
 
 const { Step } = Steps;
 
@@ -154,6 +155,33 @@ export default function OrdersPage() {
       }
    };
 
+   // Xác nhận hủy đơn hàng
+   const confirmCancelOrder = (orderId) => {
+      Modal.confirm({
+         title: 'Xác nhận hủy đơn hàng',
+         icon: <ExclamationCircleOutlined />,
+         content: 'Bạn có chắc chắn muốn hủy đơn hàng này không?',
+         okText: 'Xác nhận',
+         cancelText: 'Hủy',
+         onOk: async () => {
+            try {
+               const reason = 'Khách hàng hủy đơn hàng'; // Lý do hủy đơn hàng
+               const response = await orderService.cancelOrder(orderId, reason);
+               if (response.data?.success) {
+                  message.success('Đơn hàng đã được hủy thành công');
+                  // Tải lại trang
+                  window.location.reload();
+               } else {
+                  message.error('Không thể hủy đơn hàng');
+               }
+            } catch (error) {
+               console.error('Lỗi khi hủy đơn hàng:', error);
+               message.error('Lỗi khi hủy đơn hàng: ' + (error.response?.data?.message || error.message));
+            }
+         }
+      });
+   };
+
    // Lọc đơn hàng theo từ khóa tìm kiếm
    const filteredOrders = orders.filter((order) => {
       const matchesSearch =
@@ -233,7 +261,7 @@ export default function OrdersPage() {
          <div className="bg-gradient-to-r from-blue-500 to-blue-600 p-6 rounded-lg text-white">
             <div className="flex items-center justify-between">
                <div>
-                  <h1 className="text-3xl font-bold mb-2">Đơn hàng của tôi</h1>
+                  <h1 className="text-3xl font-bold mb-2">Đơn hàng của tôis</h1>
                   <p className="text-blue-100">Theo dõi và quản lý các đơn hàng của bạn</p>
                </div>
                <div className="text-right">
@@ -524,222 +552,17 @@ export default function OrdersPage() {
          )}
 
          {/* Modal chi tiết đơn hàng */}
-         <Modal
-            title={
-               <div className="flex items-center space-x-2">
-                  <EyeOutlined className="text-blue-500" />
-                  <span>Chi tiết đơn hàng</span>
-               </div>
-            }
-            open={detailModalVisible}
-            onCancel={() => setDetailModalVisible(false)}
-            footer={null}
-            width={900}
-            className="order-detail-modal"
-         >
-            {selectedOrder && (
-               <div className="space-y-6">
-                  {/* Thông tin đơn hàng */}
-                  <Card title="Thông tin đơn hàng" className="shadow-sm">
-                     <Row gutter={[16, 16]}>
-                        <Col xs={24} sm={12}>
-                           <div className="space-y-2">
-                              <div className="flex items-center space-x-2">
-                                 <UserOutlined className="text-blue-500" />
-                                 <span className="font-medium">Mã đơn hàng</span>
-                              </div>
-                              <p className="text-lg font-semibold">#{selectedOrder._id?.slice(-8)}</p>
-                              <p className="text-sm text-gray-500">{formatDate(selectedOrder.createdAt, true)}</p>
-                           </div>
-                        </Col>
-                        <Col xs={24} sm={12}>
-                           <div className="space-y-2">
-                              <div className="flex items-center space-x-2">
-                                 <StarFilled className="text-green-500" />
-                                 <span className="font-medium">Tổng giá trị</span>
-                              </div>
-                              <p className="text-2xl font-bold text-green-600">{formatCurrency(selectedOrder.totalPrice)}</p>
-                           </div>
-                        </Col>
-                     </Row>
-                  </Card>
-
-                  {/* Địa chỉ */}
-                  <Card title="Địa chỉ giao hàng" className="shadow-sm">
-                     <Row gutter={[16, 16]}>
-                        <Col xs={24} sm={12}>
-                           <div className="bg-green-50 p-4 rounded-lg border border-green-200">
-                              <div className="flex items-center space-x-2 mb-2">
-                                 <EnvironmentOutlined className="text-green-500" />
-                                 <span className="font-medium text-green-700">Điểm lấy hàng</span>
-                              </div>
-                              <p className="text-sm">{selectedOrder.pickupAddress}</p>
-                           </div>
-                        </Col>
-                        <Col xs={24} sm={12}>
-                           <div className="bg-red-50 p-4 rounded-lg border border-red-200">
-                              <div className="flex items-center space-x-2 mb-2">
-                                 <EnvironmentOutlined className="text-red-500" />
-                                 <span className="font-medium text-red-700">Điểm giao hàng</span>
-                              </div>
-                              <p className="text-sm">{selectedOrder.dropoffAddress}</p>
-                           </div>
-                        </Col>
-                     </Row>
-                     {selectedOrder.customerNote && (
-                        <div className="mt-4 p-3 bg-blue-50 rounded-lg">
-                           <div className="font-medium text-blue-700 mb-1">Ghi chú:</div>
-                           <p className="text-sm text-blue-600">{selectedOrder.customerNote}</p>
-                        </div>
-                     )}
-                  </Card>
-
-                  {/* Chi tiết vận chuyển */}
-                  <Card title="Chi tiết vận chuyển" className="shadow-sm">
-                     {selectedOrder.items.map((item, index) => (
-                        <div key={index} className="space-y-4">
-                           <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                              <Row gutter={[16, 16]} align="middle">
-                                 <Col xs={24} sm={16}>
-                                    <div className="space-y-2">
-                                       <div className="flex items-center space-x-2">
-                                          <TruckOutlined className="text-blue-500" />
-                                          <span className="font-semibold text-lg">{item.vehicleType}</span>
-                                          {renderOrderStatus(item.status)}
-                                       </div>
-                                       <div className="flex items-center space-x-4 text-sm text-gray-600">
-                                          <span>📦 {item.weightKg.toLocaleString()} kg</span>
-                                          <span>📏 {item.distanceKm} km</span>
-                                          <span>💰 {formatCurrency(item.priceBreakdown?.total || 0)}</span>
-                                       </div>
-                                       <div className="flex items-center space-x-2">
-                                          {item.loadingService && <Tag color="orange">Bốc xếp</Tag>}
-                                          {item.insurance && <Tag color="blue">Bảo hiểm</Tag>}
-                                       </div>
-                                    </div>
-                                 </Col>
-                                 <Col xs={24} sm={8}>
-                                    <div className="text-right">
-                                       <div className="text-2xl font-bold text-blue-600">
-                                          {formatCurrency(item.priceBreakdown?.total || 0)}
-                                       </div>
-                                       <p className="text-sm text-gray-500">Chi phí vận chuyển</p>
-                                    </div>
-                                 </Col>
-                              </Row>
-                           </div>
-
-                           {/* Progress Steps */}
-                           {item.driverId && renderOrderSteps(item)}
-
-                           {/* Thông tin tài xế */}
-                           {item.driverId && (
-                              <div className="bg-gray-50 p-4 rounded-lg">
-                                 <h4 className="font-medium mb-3">Thông tin tài xế</h4>
-                                 <Row gutter={[16, 16]} align="middle">
-                                    <Col xs={24} sm={12}>
-                                       <div className="flex items-center space-x-3">
-                                          <Avatar src={item.driverId.avatarUrl} icon={<UserOutlined />} size="large" />
-                                          <div>
-                                             <div className="font-semibold text-lg">{item.driverId.userId?.name || "Tài xế"}</div>
-                                             <div className="flex items-center space-x-2">
-                                                <StarFilled className="text-yellow-500" />
-                                                <span className="font-medium">{item.driverId.rating || "N/A"}</span>
-                                                <span className="text-sm text-gray-500">({item.driverId.totalTrips || 0} chuyến)</span>
-                                             </div>
-                                          </div>
-                                       </div>
-                                    </Col>
-                                    <Col xs={24} sm={12}>
-                                       <div className="space-y-2">
-                                          <div className="flex items-center space-x-2">
-                                             <PhoneOutlined className="text-blue-500" />
-                                             <span>{item.driverId.userId?.phone || "N/A"}</span>
-                                          </div>
-                                          <div className="flex items-center space-x-2">
-                                             <TruckOutlined className="text-green-500" />
-                                             <span>{item.vehicleType}</span>
-                                          </div>
-                                       </div>
-                                    </Col>
-                                 </Row>
-                              </div>
-                           )}
-
-                           {/* Chi phí chi tiết */}
-                           <div className="bg-gray-50 p-4 rounded-lg">
-                              <h4 className="font-medium mb-3">Chi phí chi tiết</h4>
-                              <div className="space-y-2">
-                                 <div className="flex justify-between">
-                                    <span>Cước phí ({formatCurrency(item.priceBreakdown?.basePerKm || 0)}/km × {item.distanceKm}km):</span>
-                                    <span className="font-medium">{formatCurrency(item.priceBreakdown?.distanceCost || 0)}</span>
-                                 </div>
-                                 {item.loadingService && (
-                                    <div className="flex justify-between">
-                                       <span>Phí bốc xếp:</span>
-                                       <span className="font-medium">{formatCurrency(item.priceBreakdown?.loadCost || 0)}</span>
-                                    </div>
-                                 )}
-                                 {item.insurance && (
-                                    <div className="flex justify-between">
-                                       <span>Phí bảo hiểm:</span>
-                                       <span className="font-medium">{formatCurrency(item.priceBreakdown?.insuranceFee || 0)}</span>
-                                    </div>
-                                 )}
-                                 <Divider />
-                                 <div className="flex justify-between font-bold text-lg">
-                                    <span>Tổng cộng:</span>
-                                    <span className="text-blue-600">{formatCurrency(item.priceBreakdown?.total || 0)}</span>
-                                 </div>
-                              </div>
-                           </div>
-
-                           {/* Action buttons cho đơn đã hoàn thành */}
-                           {item.status === 'Delivered' && item.driverId && (
-                              <div className="flex justify-center space-x-4">
-                                 <Button
-                                    type="primary"
-                                    size="large"
-                                    icon={<StarOutlined />}
-                                    onClick={() => {
-                                       setDetailModalVisible(false);
-                                       handleOpenFeedback(selectedOrder);
-                                    }}
-                                    className="bg-yellow-500 hover:bg-yellow-600 border-yellow-500"
-                                 >
-                                    Đánh giá dịch vụ
-                                 </Button>
-                                 <Button
-                                    danger
-                                    size="large"
-                                    icon={<WarningOutlined />}
-                                    onClick={() => {
-                                       setDetailModalVisible(false);
-                                       handleOpenReport(selectedOrder);
-                                    }}
-                                 >
-                                    Báo cáo tài xế
-                                 </Button>
-                              </div>
-                           )}
-                        </div>
-                     ))}
-                  </Card>
-
-                  {/* Feedback Section */}
-                  {feedbacks.length > 0 && (
-                     <Card title="Đánh giá dịch vụ" className="shadow-sm">
-                        <FeedbackDisplay
-                           feedbacks={feedbacks}
-                           stats={feedbackStats}
-                           showStats={true}
-                           loading={feedbackLoading}
-                        />
-                     </Card>
-                  )}
-               </div>
-            )}
-         </Modal>
+         <OrderDetailModal
+            visible={detailModalVisible}
+            onClose={() => setDetailModalVisible(false)}
+            order={selectedOrder}
+            feedbacks={feedbacks}
+            feedbackStats={feedbackStats}
+            feedbackLoading={feedbackLoading}
+            onCancelOrder={confirmCancelOrder}
+            onOpenFeedback={handleOpenFeedback}
+            onOpenReport={handleOpenReport}
+         />
 
          {/* Modal đánh giá */}
          <FeedbackModal

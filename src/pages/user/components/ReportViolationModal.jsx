@@ -45,7 +45,7 @@ const ReportViolationModal = ({
       setSubmitting(true);
       try {
          const payload = {
-            driverId: driver._id,
+            driverId: driver?._id || null,
             orderId: order?._id || null,
             orderItemId: orderItem?._id || null,
             violationType: values.violationType,
@@ -54,6 +54,19 @@ const ReportViolationModal = ({
             severity: values.severity || 'Medium',
             isAnonymous: values.isAnonymous || false
          };
+
+         if (!payload.driverId && order) {
+            const deliveredItem = order.items.find(item => item.status === 'Delivered' && item.driverId);
+            if (deliveredItem) {
+               payload.driverId = deliveredItem.driverId;
+            }
+         }
+
+         if (!payload.driverId) {
+            message.error('Không tìm thấy tài xế cho đơn hàng này');
+            setSubmitting(false);
+            return;
+         }
 
          const response = await violationService.reportViolation(payload);
          if (response.data?.success) {

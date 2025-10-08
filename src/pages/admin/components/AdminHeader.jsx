@@ -1,10 +1,32 @@
 import React from "react";
-import { Layout, Avatar, Dropdown, Space } from "antd";
+import { Layout, Avatar, Dropdown, Space, message } from "antd";
 import { UserOutlined, LogoutOutlined } from "@ant-design/icons";
+import { useNavigate } from "react-router-dom";
+import { authService } from "../../../authentication/api/authService";
 
 const { Header } = Layout;
 
 export const AdminHeader = () => {
+   const navigate = useNavigate();
+
+   const handleLogout = async () => {
+      try {
+         const refreshToken = localStorage.getItem("refreshToken");
+         if (refreshToken) {
+            try {
+               await authService.logout(refreshToken);
+            } catch (e) {
+               // ignore API error on logout, proceed to clear client state
+            }
+         }
+      } finally {
+         localStorage.removeItem("accessToken");
+         localStorage.removeItem("refreshToken");
+         message.success("Đã đăng xuất");
+         navigate("/auth/login", { replace: true });
+      }
+   };
+
    const menuItems = [
       {
          key: "logout",
@@ -13,6 +35,7 @@ export const AdminHeader = () => {
                <LogoutOutlined /> Đăng xuất
             </div>
          ),
+         onClick: handleLogout,
       },
    ];
 

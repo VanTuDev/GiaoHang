@@ -64,7 +64,14 @@ const DriversPage = () => {
                if (!userId) return app;
                try {
                   const uRes = await adminService.getUser(userId);
-                  return { ...app, user: uRes.data?.data || app.user };
+                  const detail = uRes.data?.data;
+                  return {
+                     ...app,
+                     user: detail?.user || app.user,
+                     driver: detail?.driver,
+                     vehicles: detail?.vehicles || [],
+                     stats: detail?.stats || {}
+                  };
                } catch {
                   return app;
                }
@@ -281,7 +288,14 @@ const DriversPage = () => {
                                              const [uRes] = await Promise.all([
                                                 adminService.getUser(userId),
                                              ]);
-                                             setViewing({ ...appData, user: uRes.data?.data || appData.user });
+                                             const detail = uRes.data?.data;
+                                             setViewing({
+                                                ...appData,
+                                                user: detail?.user || appData.user,
+                                                driver: detail?.driver,
+                                                vehicles: detail?.vehicles || [],
+                                                stats: detail?.stats || {}
+                                             });
                                           } else {
                                              setViewing(appData);
                                           }
