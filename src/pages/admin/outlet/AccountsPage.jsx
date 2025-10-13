@@ -40,9 +40,13 @@ const AccountsPage = () => {
                         adminService.getUser(id),
                         driverService.adminList({ userId: id, limit: 10 }),
                      ]);
-                     const user = uRes.data?.data || record;
+                     const detail = uRes.data?.data;
+                     const user = detail?.user || record;
+                     const driver = detail?.driver;
+                     const vehicles = detail?.vehicles || [];
+                     const stats = detail?.stats || {};
                      const applications = appsRes.data?.data || [];
-                     setViewing({ user, applications });
+                     setViewing({ user, driver, vehicles, stats, applications });
                   } catch (e) {
                      message.error("Không lấy được chi tiết người dùng");
                   }
@@ -58,7 +62,7 @@ const AccountsPage = () => {
       <div>
          <h2 className="text-xl font-semibold mb-4">Quản lý tài khoản</h2>
          <Table loading={loading} dataSource={data} columns={columns} pagination={{ pageSize: 10 }} bordered />
-         <Modal open={!!viewing} onCancel={() => setViewing(null)} footer={null} title="Chi tiết người dùng">
+         <Modal open={!!viewing} onCancel={() => setViewing(null)} footer={null} title="Chi tiết người dùng" width={900} centered styles={{ body: { maxHeight: '75vh', overflowY: 'auto', paddingRight: 8 } }}>
             {viewing && (
                <div className="max-h-[70vh] overflow-y-auto pr-1">
                   <Descriptions bordered column={1} size="small">
@@ -75,6 +79,14 @@ const AccountsPage = () => {
                      <Descriptions.Item label="Tạo lúc">{viewing.user?.createdAt ? new Date(viewing.user.createdAt).toLocaleString() : ""}</Descriptions.Item>
                      <Descriptions.Item label="Cập nhật lúc">{viewing.user?.updatedAt ? new Date(viewing.user.updatedAt).toLocaleString() : ""}</Descriptions.Item>
                      <Descriptions.Item label="User ID">{viewing.user?._id}</Descriptions.Item>
+                     {viewing.driver ? (
+                        <Descriptions.Item label="Driver status">{viewing.driver.status}</Descriptions.Item>
+                     ) : null}
+                     {(viewing.stats?.orders || viewing.stats?.driver) ? (
+                        <Descriptions.Item label="Thống kê">
+                           <pre className="whitespace-pre-wrap text-xs">{JSON.stringify(viewing.stats, null, 2)}</pre>
+                        </Descriptions.Item>
+                     ) : null}
                   </Descriptions>
 
                   {Array.isArray(viewing.applications) && viewing.applications.length > 0 ? (
@@ -104,6 +116,23 @@ const AccountsPage = () => {
                               </div>
                            </div>
                         ))}
+                     </div>
+                  ) : null}
+                  {Array.isArray(viewing.vehicles) && viewing.vehicles.length > 0 ? (
+                     <div className="mt-4">
+                        <h4 className="mb-2 font-semibold">Xe của người dùng (nếu là tài xế)</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+                           {viewing.vehicles.map((v) => (
+                              <div key={v._id} className="flex items-center gap-12">
+                                 <img src={v.photoUrl} alt={v.type} className="w-28 h-20 object-cover rounded" />
+                                 <div>
+                                    <div className="font-medium">{v.type} - {v.licensePlate}</div>
+                                    <div className="text-sm text-gray-500">Tải trọng: {v.maxWeightKg}kg</div>
+                                    <Tag color={v.status === 'Active' ? 'green' : 'default'}>{v.status || 'N/A'}</Tag>
+                                 </div>
+                              </div>
+                           ))}
+                        </div>
                      </div>
                   ) : null}
                </div>

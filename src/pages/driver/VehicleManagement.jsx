@@ -13,8 +13,13 @@ import {
    message,
    Switch,
    Checkbox,
-   Divider,
-   Tabs
+   Row,
+   Col,
+   Statistic,
+   Badge,
+   Space,
+   Tag,
+   Divider
 } from 'antd';
 import {
    PlusOutlined,
@@ -22,16 +27,20 @@ import {
    EditOutlined,
    DeleteOutlined,
    ExclamationCircleOutlined,
-   UploadOutlined,
    CheckCircleOutlined,
-   CloseCircleOutlined
+   CloseCircleOutlined,
+   ThunderboltOutlined,
+   EnvironmentOutlined,
+   DollarOutlined,
+   StarOutlined,
+   TrophyOutlined,
+   RocketOutlined
 } from '@ant-design/icons';
 import { vehicleService } from '../../features/vehicles/api/vehicleService';
 import { driverService } from '../../features/driver/api/driverService';
 import { orderService } from '../../features/orders/api/orderService';
 import { uploadToCloudinary } from '../../utils/cloudinaryService';
-
-const { TabPane } = Tabs;
+import { formatCurrency } from '../../utils/formatters';
 
 export default function VehicleManagement() {
    const [form] = Form.useForm();
@@ -47,8 +56,13 @@ export default function VehicleManagement() {
    const [selectedDistricts, setSelectedDistricts] = useState([]);
    const [isOnline, setIsOnline] = useState(false);
    const [updatingStatus, setUpdatingStatus] = useState(false);
-   const [activeTab, setActiveTab] = useState('vehicles');
    const [driverInfo, setDriverInfo] = useState(null);
+   const [stats, setStats] = useState({
+      totalTrips: 0,
+      rating: 5.0,
+      balance: 0,
+      activeOrders: 0
+   });
 
    // Tải dữ liệu ban đầu
    useEffect(() => {
@@ -76,6 +90,12 @@ export default function VehicleManagement() {
                setDriverInfo(driverData);
                setIsOnline(driverData.isOnline || false);
                setSelectedDistricts(driverData.serviceAreas || []);
+               setStats({
+                  totalTrips: driverData.totalTrips || 0,
+                  rating: driverData.rating || 5.0,
+                  balance: driverData.balance || 0,
+                  activeOrders: 0 // TODO: fetch from orders API
+               });
             }
          } catch (error) {
             console.error("Lỗi khi tải dữ liệu:", error);
@@ -145,6 +165,7 @@ export default function VehicleManagement() {
          icon: <ExclamationCircleOutlined />,
          content: `Bạn có chắc chắn muốn xóa xe ${vehicle.type} (${vehicle.licensePlate}) không?`,
          okText: 'Xóa',
+         okType: 'danger',
          cancelText: 'Hủy',
          onOk: () => handleDeleteVehicle(vehicle._id)
       });
@@ -160,9 +181,8 @@ export default function VehicleManagement() {
          let photoUrl = null;
          if (fileList.length > 0 && fileList[0].originFileObj) {
             try {
-               // Sử dụng API upload mới
                const result = await uploadToCloudinary(fileList[0].originFileObj, 'vehicles');
-               photoUrl = result.url; // API backend trả về result.url
+               photoUrl = result.url;
             } catch (error) {
                console.error('Lỗi khi upload ảnh:', error);
                message.error('Không thể upload ảnh. Vui lòng thử lại sau.');
@@ -182,17 +202,14 @@ export default function VehicleManagement() {
          let response;
 
          if (editingVehicle) {
-            // Cập nhật xe
             response = await vehicleService.updateVehicle(editingVehicle._id, vehicleData);
          } else {
-            // Thêm xe mới
             response = await vehicleService.addVehicle(vehicleData);
          }
 
          if (response.data?.success) {
             message.success(editingVehicle ? 'Cập nhật xe thành công' : 'Thêm xe mới thành công');
 
-            // Cập nhật danh sách xe
             if (editingVehicle) {
                setVehicles(vehicles.map(v =>
                   v._id === editingVehicle._id ? { ...v, ...vehicleData, photoUrl } : v
@@ -201,7 +218,6 @@ export default function VehicleManagement() {
                setVehicles([...vehicles, { ...response.data.data, photoUrl }]);
             }
 
-            // Đóng modal
             setModalVisible(false);
          } else {
             message.error(editingVehicle ? 'Không thể cập nhật xe' : 'Không thể thêm xe mới');
@@ -258,138 +274,221 @@ export default function VehicleManagement() {
    // Kiểm tra xem có xe nào đang hoạt động không
    const hasActiveVehicle = vehicles.some(v => v.status === 'Active');
 
+   if (loading) {
+      return (
+         <div className="flex justify-center items-center h-screen">
+            <Spin size="large" tip="Đang tải dữ liệu..." />
+         </div>
+      );
+   }
+
    return (
-      <div>
-         <h2 className="text-2xl font-bold mb-4">Quản lý xe và trạng thái</h2>
+      <div className="p-6 bg-gray-50 min-h-screen">
+         {/* Header */}
+         <div className="mb-6">
+            <h1 className="text-3xl font-bold text-gray-800 mb-2">Quản lý xe & Trạng thái</h1>
+            <p className="text-gray-600">Quản lý xe của bạn và trạng thái hoạt động để nhận đơn hàng</p>
+         </div>
 
-         <Tabs activeKey={activeTab} onChange={setActiveTab}>
-            <TabPane tab="Quản lý xe" key="vehicles">
-               <div className="flex justify-between items-center mb-4">
-                  <div>
-                     <span className="text-gray-500">Tổng số xe: {vehicles.length}</span>
-                  </div>
-                  <Button
-                     type="primary"
-                     icon={<PlusOutlined />}
-                     onClick={handleAddVehicle}
-                     className="bg-blue-600"
-                  >
-                     Thêm xe mới
-                  </Button>
-               </div>
+         {error && (
+            <Alert
+               message="Lỗi"
+               description={error}
+               type="error"
+               showIcon
+               className="mb-6"
+               closable
+               onClose={() => setError(null)}
+            />
+         )}
 
-               {error && (
-                  <Alert
-                     message="Lỗi"
-                     description={error}
-                     type="error"
-                     showIcon
-                     className="mb-4"
-                     closable
-                     onClose={() => setError(null)}
+         {/* Stats Cards */}
+         <Row gutter={[16, 16]} className="mb-6">
+            <Col xs={24} sm={12} lg={6}>
+               <Card className="border-l-4 border-l-blue-500 shadow-sm hover:shadow-md transition-shadow">
+                  <Statistic
+                     title={<span className="text-gray-600">Tổng chuyến</span>}
+                     value={stats.totalTrips}
+                     prefix={<CarOutlined className="text-blue-500" />}
+                     valueStyle={{ color: '#1890ff', fontSize: '24px' }}
                   />
-               )}
+               </Card>
+            </Col>
+            <Col xs={24} sm={12} lg={6}>
+               <Card className="border-l-4 border-l-yellow-500 shadow-sm hover:shadow-md transition-shadow">
+                  <Statistic
+                     title={<span className="text-gray-600">Đánh giá</span>}
+                     value={stats.rating}
+                     precision={1}
+                     suffix="/ 5"
+                     prefix={<StarOutlined className="text-yellow-500" />}
+                     valueStyle={{ color: '#faad14', fontSize: '24px' }}
+                  />
+               </Card>
+            </Col>
+            <Col xs={24} sm={12} lg={6}>
+               <Card className="border-l-4 border-l-green-500 shadow-sm hover:shadow-md transition-shadow">
+                  <Statistic
+                     title={<span className="text-gray-600">Số dư</span>}
+                     value={stats.balance}
+                     prefix={<DollarOutlined className="text-green-500" />}
+                     valueStyle={{ color: '#52c41a', fontSize: '24px' }}
+                     formatter={(value) => formatCurrency(value)}
+                  />
+               </Card>
+            </Col>
+            <Col xs={24} sm={12} lg={6}>
+               <Card className="border-l-4 border-l-purple-500 shadow-sm hover:shadow-md transition-shadow">
+                  <Statistic
+                     title={<span className="text-gray-600">Trạng thái</span>}
+                     value={isOnline ? 'ONLINE' : 'OFFLINE'}
+                     prefix={isOnline ? <ThunderboltOutlined className="text-purple-500" /> : <CloseCircleOutlined className="text-gray-400" />}
+                     valueStyle={{ color: isOnline ? '#722ed1' : '#8c8c8c', fontSize: '20px' }}
+                  />
+               </Card>
+            </Col>
+         </Row>
 
-               {loading ? (
-                  <div className="flex justify-center py-10">
-                     <Spin size="large" tip="Đang tải danh sách xe..." />
-                  </div>
-               ) : vehicles.length > 0 ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                     {vehicles.map(vehicle => (
-                        <Card
-                           key={vehicle._id}
-                           className="h-full"
-                           cover={
-                              vehicle.photoUrl ? (
-                                 <img
-                                    alt={vehicle.type}
-                                    src={vehicle.photoUrl}
-                                    className="h-48 object-cover"
-                                 />
-                              ) : (
-                                 <div className="h-48 bg-gray-200 flex items-center justify-center">
-                                    <CarOutlined className="text-4xl text-gray-400" />
-                                 </div>
-                              )
-                           }
-                           actions={[
-                              <Button
-                                 icon={<EditOutlined />}
-                                 onClick={() => handleEditVehicle(vehicle)}
-                              >
-                                 Chỉnh sửa
-                              </Button>,
-                              <Button
-                                 danger
-                                 icon={<DeleteOutlined />}
-                                 onClick={() => confirmDeleteVehicle(vehicle)}
-                              >
-                                 Xóa
-                              </Button>
-                           ]}
-                        >
-                           <Card.Meta
-                              title={
-                                 <div className="flex justify-between items-center">
-                                    <span>{vehicle.type}</span>
-                                    <span className={`px-2 py-0.5 rounded text-xs ${vehicle.status === 'Active' ? 'bg-green-100 text-green-800' :
-                                       vehicle.status === 'Maintenance' ? 'bg-yellow-100 text-yellow-800' :
-                                          'bg-gray-100 text-gray-800'
-                                       }`}>
-                                       {vehicle.status === 'Active' ? 'Đang hoạt động' :
-                                          vehicle.status === 'Maintenance' ? 'Đang bảo trì' :
-                                             'Không hoạt động'}
-                                    </span>
-                                 </div>
-                              }
-                              description={
-                                 <div>
-                                    <p><strong>Biển số:</strong> {vehicle.licensePlate}</p>
-                                    <p><strong>Trọng tải:</strong> {vehicle.maxWeightKg?.toLocaleString() || "N/A"} kg</p>
-                                    {vehicle.description && <p><strong>Mô tả:</strong> {vehicle.description}</p>}
-                                 </div>
-                              }
-                           />
-                        </Card>
-                     ))}
-                  </div>
-               ) : (
-                  <Empty
-                     image={Empty.PRESENTED_IMAGE_SIMPLE}
-                     description="Bạn chưa có xe nào"
-                     className="py-10"
-                  >
+         <Row gutter={[16, 16]}>
+            {/* Left Column - Vehicle Management */}
+            <Col xs={24} lg={14}>
+               <Card
+                  title={
+                     <div className="flex items-center justify-between">
+                        <span className="text-lg font-semibold flex items-center">
+                           <CarOutlined className="mr-2 text-blue-500" />
+                           Danh sách xe
+                        </span>
+                        <Badge count={vehicles.length} showZero color="#1890ff" />
+                     </div>
+                  }
+                  extra={
                      <Button
                         type="primary"
+                        icon={<PlusOutlined />}
                         onClick={handleAddVehicle}
-                        className="bg-blue-600"
+                        className="bg-gradient-to-r from-blue-500 to-blue-600"
                      >
                         Thêm xe mới
                      </Button>
-                  </Empty>
-               )}
-            </TabPane>
+                  }
+                  className="shadow-sm"
+               >
+                  {vehicles.length > 0 ? (
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {vehicles.map(vehicle => (
+                           <Card
+                              key={vehicle._id}
+                              className="border hover:shadow-lg transition-all duration-300"
+                              cover={
+                                 vehicle.photoUrl ? (
+                                    <div className="relative">
+                                       <img
+                                          alt={vehicle.type}
+                                          src={vehicle.photoUrl}
+                                          className="h-40 object-cover"
+                                       />
+                                       <div className="absolute top-2 right-2">
+                                          <Tag color={vehicle.status === 'Active' ? 'success' : vehicle.status === 'Maintenance' ? 'warning' : 'default'}>
+                                             {vehicle.status === 'Active' ? 'Hoạt động' : vehicle.status === 'Maintenance' ? 'Bảo trì' : 'Ngừng'}
+                                          </Tag>
+                                       </div>
+                                    </div>
+                                 ) : (
+                                    <div className="h-40 bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center">
+                                       <CarOutlined className="text-5xl text-gray-400" />
+                                    </div>
+                                 )
+                              }
+                           >
+                              <div className="space-y-2">
+                                 <h3 className="font-semibold text-lg text-gray-800">{vehicle.type}</h3>
+                                 <div className="space-y-1">
+                                    <p className="text-gray-600">
+                                       <span className="font-medium">Biển số:</span> <span className="text-blue-600">{vehicle.licensePlate}</span>
+                                    </p>
+                                    <p className="text-gray-600">
+                                       <span className="font-medium">Trọng tải:</span> {vehicle.maxWeightKg?.toLocaleString() || "N/A"} kg
+                                    </p>
+                                    {vehicle.description && (
+                                       <p className="text-gray-500 text-sm italic">{vehicle.description}</p>
+                                    )}
+                                 </div>
+                                 <div className="flex justify-end space-x-2 pt-2 border-t">
+                                    <Button
+                                       size="small"
+                                       icon={<EditOutlined />}
+                                       onClick={() => handleEditVehicle(vehicle)}
+                                    >
+                                       Sửa
+                                    </Button>
+                                    <Button
+                                       size="small"
+                                       danger
+                                       icon={<DeleteOutlined />}
+                                       onClick={() => confirmDeleteVehicle(vehicle)}
+                                    >
+                                       Xóa
+                                    </Button>
+                                 </div>
+                              </div>
+                           </Card>
+                        ))}
+                     </div>
+                  ) : (
+                     <Empty
+                        image={Empty.PRESENTED_IMAGE_SIMPLE}
+                        description={
+                           <span className="text-gray-500">
+                              Bạn chưa có xe nào. Hãy thêm xe để bắt đầu nhận đơn!
+                           </span>
+                        }
+                        className="py-10"
+                     >
+                        <Button
+                           type="primary"
+                           icon={<PlusOutlined />}
+                           onClick={handleAddVehicle}
+                           size="large"
+                           className="bg-gradient-to-r from-blue-500 to-blue-600"
+                        >
+                           Thêm xe đầu tiên
+                        </Button>
+                     </Empty>
+                  )}
+               </Card>
+            </Col>
 
-            <TabPane tab="Trạng thái hoạt động" key="status">
-               <Card title="Trạng thái hoạt động" className="mb-4">
-                  <div className="flex items-center justify-between mb-4">
-                     <div>
-                        <h3 className="text-lg font-medium mb-2">
-                           {isOnline ? (
-                              <span className="text-green-600 flex items-center">
-                                 <CheckCircleOutlined className="mr-2" /> Đang hoạt động
-                              </span>
-                           ) : (
-                              <span className="text-gray-500 flex items-center">
-                                 <CloseCircleOutlined className="mr-2" /> Không hoạt động
-                              </span>
-                           )}
+            {/* Right Column - Status & Service Areas */}
+            <Col xs={24} lg={10}>
+               {/* Online Status */}
+               <Card
+                  className="mb-4 shadow-sm"
+                  title={
+                     <span className="text-lg font-semibold flex items-center">
+                        <RocketOutlined className="mr-2 text-purple-500" />
+                        Trạng thái hoạt động
+                     </span>
+                  }
+               >
+                  <div className="text-center py-6">
+                     <div className="mb-6">
+                        {isOnline ? (
+                           <div className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-green-100 mb-4">
+                              <CheckCircleOutlined className="text-5xl text-green-600" />
+                           </div>
+                        ) : (
+                           <div className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-gray-100 mb-4">
+                              <CloseCircleOutlined className="text-5xl text-gray-400" />
+                           </div>
+                        )}
+                        <h3 className={`text-2xl font-bold mb-2 ${isOnline ? 'text-green-600' : 'text-gray-500'}`}>
+                           {isOnline ? 'ĐANG HOẠT ĐỘNG' : 'KHÔNG HOẠT ĐỘNG'}
                         </h3>
                         <p className="text-gray-600">
                            {isOnline
-                              ? "Bạn đang online và có thể nhận đơn hàng mới."
-                              : "Bạn đang offline và không thể nhận đơn hàng mới."}
+                              ? 'Bạn đang online và sẵn sàng nhận đơn hàng mới'
+                              : 'Bật để bắt đầu nhận đơn hàng'}
                         </p>
                      </div>
 
@@ -398,64 +497,87 @@ export default function VehicleManagement() {
                         onChange={handleToggleOnline}
                         loading={updatingStatus}
                         disabled={!hasActiveVehicle}
-                        checkedChildren="Online"
-                        unCheckedChildren="Offline"
-                        className={isOnline ? "bg-green-500" : ""}
+                        checkedChildren={<span className="font-medium">ONLINE</span>}
+                        unCheckedChildren={<span className="font-medium">OFFLINE</span>}
+                        className={`${isOnline ? 'bg-green-500' : ''} transform scale-150`}
                      />
-                  </div>
 
-                  {!hasActiveVehicle && (
-                     <Alert
-                        message="Không có xe hoạt động"
-                        description="Bạn cần có ít nhất một xe đang hoạt động để nhận đơn hàng."
-                        type="warning"
-                        showIcon
-                     />
-                  )}
+                     {!hasActiveVehicle && (
+                        <Alert
+                           message="Cần có xe hoạt động"
+                           description="Bạn cần ít nhất một xe đang hoạt động để nhận đơn"
+                           type="warning"
+                           showIcon
+                           className="mt-4"
+                        />
+                     )}
+                  </div>
                </Card>
 
-               <Card title="Khu vực hoạt động">
-                  <div className="mb-4">
-                     <p className="text-gray-600 mb-2">Chọn các quận/huyện bạn muốn hoạt động:</p>
-                     <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                        {districts.map(district => (
-                           <Checkbox
-                              key={district}
-                              checked={selectedDistricts.includes(district)}
-                              onChange={(e) => {
-                                 if (e.target.checked) {
-                                    setSelectedDistricts([...selectedDistricts, district]);
-                                 } else {
-                                    setSelectedDistricts(selectedDistricts.filter(d => d !== district));
-                                 }
-                              }}
-                           >
-                              {district}
-                           </Checkbox>
-                        ))}
+               {/* Service Areas */}
+               <Card
+                  title={
+                     <span className="text-lg font-semibold flex items-center">
+                        <EnvironmentOutlined className="mr-2 text-red-500" />
+                        Khu vực hoạt động
+                     </span>
+                  }
+                  className="shadow-sm"
+               >
+                  <div className="space-y-4">
+                     <p className="text-gray-600">Chọn các quận/huyện bạn muốn phục vụ:</p>
+                     <div className="bg-gray-50 p-4 rounded-lg max-h-80 overflow-y-auto">
+                        <div className="grid grid-cols-1 gap-2">
+                           {districts.map(district => (
+                              <Checkbox
+                                 key={district}
+                                 checked={selectedDistricts.includes(district)}
+                                 onChange={(e) => {
+                                    if (e.target.checked) {
+                                       setSelectedDistricts([...selectedDistricts, district]);
+                                    } else {
+                                       setSelectedDistricts(selectedDistricts.filter(d => d !== district));
+                                    }
+                                 }}
+                                 className="hover:bg-white p-2 rounded transition-colors"
+                              >
+                                 <span className="font-medium">{district}</span>
+                              </Checkbox>
+                           ))}
+                        </div>
+                     </div>
+
+                     <div className="flex items-center justify-between pt-2 border-t">
+                        <span className="text-sm text-gray-600">
+                           Đã chọn: <strong className="text-blue-600">{selectedDistricts.length}</strong> khu vực
+                        </span>
+                        <Button
+                           type="primary"
+                           onClick={handleUpdateServiceAreas}
+                           loading={updatingStatus}
+                           disabled={selectedDistricts.length === 0}
+                           icon={<CheckCircleOutlined />}
+                           className="bg-gradient-to-r from-blue-500 to-blue-600"
+                        >
+                           Cập nhật
+                        </Button>
                      </div>
                   </div>
-
-                  <Button
-                     type="primary"
-                     onClick={handleUpdateServiceAreas}
-                     loading={updatingStatus}
-                     disabled={selectedDistricts.length === 0}
-                     className="bg-blue-600"
-                  >
-                     Cập nhật khu vực hoạt động
-                  </Button>
                </Card>
-            </TabPane>
-         </Tabs>
+            </Col>
+         </Row>
 
          {/* Modal thêm/sửa xe */}
          <Modal
-            title={editingVehicle ? "Chỉnh sửa thông tin xe" : "Thêm xe mới"}
+            title={
+               <span className="text-xl font-semibold">
+                  {editingVehicle ? "Chỉnh sửa thông tin xe" : "Thêm xe mới"}
+               </span>
+            }
             open={modalVisible}
             onCancel={() => setModalVisible(false)}
             footer={[
-               <Button key="cancel" onClick={() => setModalVisible(false)}>
+               <Button key="cancel" onClick={() => setModalVisible(false)} size="large">
                   Hủy
                </Button>,
                <Button
@@ -463,70 +585,73 @@ export default function VehicleManagement() {
                   type="primary"
                   loading={submitting}
                   onClick={handleSaveVehicle}
-                  className="bg-blue-600"
+                  size="large"
+                  className="bg-gradient-to-r from-blue-500 to-blue-600"
                >
                   {editingVehicle ? "Cập nhật" : "Thêm mới"}
                </Button>
             ]}
+            width={600}
          >
             <Form
                form={form}
                layout="vertical"
+               className="mt-4"
             >
                <Form.Item
                   name="type"
-                  label="Loại xe"
+                  label={<span className="font-medium">Loại xe</span>}
                   rules={[{ required: true, message: 'Vui lòng chọn loại xe' }]}
                >
-                  <Select placeholder="Chọn loại xe">
-                     <Select.Option value="TruckSmall">Xe tải nhỏ (0.5-1 tấn)</Select.Option>
-                     <Select.Option value="TruckMedium">Xe tải vừa (1-3 tấn)</Select.Option>
-                     <Select.Option value="TruckLarge">Xe tải to (3-5 tấn)</Select.Option>
-                     <Select.Option value="TruckBox">Xe thùng (5-10 tấn)</Select.Option>
-                     <Select.Option value="DumpTruck">Xe ben</Select.Option>
-                     <Select.Option value="PickupTruck">Xe bán tải</Select.Option>
-                     <Select.Option value="Trailer">Xe kéo</Select.Option>
+                  <Select placeholder="Chọn loại xe" size="large">
+                     <Select.Option value="TruckSmall">🚛 Xe tải nhỏ (0.5-1 tấn)</Select.Option>
+                     <Select.Option value="TruckMedium">🚚 Xe tải vừa (1-3 tấn)</Select.Option>
+                     <Select.Option value="TruckLarge">🚛 Xe tải to (3-5 tấn)</Select.Option>
+                     <Select.Option value="TruckBox">📦 Xe thùng (5-10 tấn)</Select.Option>
+                     <Select.Option value="DumpTruck">🏗️ Xe ben</Select.Option>
+                     <Select.Option value="PickupTruck">🛻 Xe bán tải</Select.Option>
+                     <Select.Option value="Trailer">🚜 Xe kéo</Select.Option>
                   </Select>
                </Form.Item>
 
                <Form.Item
                   name="licensePlate"
-                  label="Biển số xe"
+                  label={<span className="font-medium">Biển số xe</span>}
                   rules={[{ required: true, message: 'Vui lòng nhập biển số xe' }]}
                >
-                  <Input placeholder="Biển số xe" />
+                  <Input placeholder="VD: 43A-12345" size="large" />
                </Form.Item>
 
                <Form.Item
                   name="maxWeightKg"
-                  label="Trọng tải tối đa (kg)"
+                  label={<span className="font-medium">Trọng tải tối đa (kg)</span>}
                   rules={[{ required: true, message: 'Vui lòng nhập trọng tải tối đa' }]}
                >
-                  <Input type="number" placeholder="Trọng tải tối đa (kg)" />
+                  <Input type="number" placeholder="VD: 1000" size="large" />
                </Form.Item>
 
                <Form.Item
                   name="description"
-                  label="Mô tả"
+                  label={<span className="font-medium">Mô tả</span>}
                >
-                  <Input.TextArea rows={3} placeholder="Mô tả về xe" />
+                  <Input.TextArea rows={3} placeholder="Mô tả về xe (tùy chọn)" />
                </Form.Item>
 
                <Form.Item
                   name="status"
-                  label="Trạng thái"
+                  label={<span className="font-medium">Trạng thái</span>}
                   rules={[{ required: true, message: 'Vui lòng chọn trạng thái' }]}
                   initialValue="Active"
                >
-                  <Select placeholder="Chọn trạng thái">
-                     <Select.Option value="Active">Đang hoạt động</Select.Option>
-                     <Select.Option value="Maintenance">Đang bảo trì</Select.Option>
-                     <Select.Option value="Inactive">Không hoạt động</Select.Option>
+                  <Select placeholder="Chọn trạng thái" size="large">
+                     <Select.Option value="Active">✅ Đang hoạt động</Select.Option>
+                     <Select.Option value="Maintenance">🔧 Đang bảo trì</Select.Option>
+                     <Select.Option value="Inactive">⛔ Không hoạt động</Select.Option>
                   </Select>
                </Form.Item>
 
                <Form.Item
-                  label="Hình ảnh xe"
+                  label={<span className="font-medium">Hình ảnh xe</span>}
                >
                   <Upload
                      listType="picture-card"
@@ -538,7 +663,7 @@ export default function VehicleManagement() {
                      {fileList.length >= 1 ? null : (
                         <div>
                            <PlusOutlined />
-                           <div style={{ marginTop: 8 }}>Tải lên</div>
+                           <div style={{ marginTop: 8 }}>Tải ảnh lên</div>
                         </div>
                      )}
                   </Upload>

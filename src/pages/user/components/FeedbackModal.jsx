@@ -149,11 +149,11 @@ const FeedbackModal = ({
             layout="vertical"
             onFinish={handleSubmit}
             initialValues={{
-               overallRating: 5,
-               serviceRating: 5,
-               driverRating: 5,
-               vehicleRating: 5,
-               punctualityRating: 5
+               overallRating: 1,
+               serviceRating: 1,
+               driverRating: 1,
+               vehicleRating: 1,
+               punctualityRating: 1
             }}
          >
             {/* Đánh giá tổng quan */}

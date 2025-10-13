@@ -104,7 +104,7 @@ const Reports = () => {
             <div>
                <h1 className="text-2xl font-bold flex items-center">
                   <WarningOutlined className="mr-2 text-red-500" />
-                  Báo cáo vi phạm của tôi
+                  Báo cáo vi phạm
                </h1>
                <p className="text-gray-600 mt-1">
                   Theo dõi trạng thái các báo cáo vi phạm bạn đã gửi
