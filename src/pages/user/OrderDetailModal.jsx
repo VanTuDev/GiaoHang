@@ -1,5 +1,5 @@
 import React from 'react';
-import { Modal, Card, Row, Col, Button, Divider, Tag, Avatar } from 'antd';
+import { Modal, Card, Row, Col, Button, Divider, Tag, Avatar, Steps } from 'antd';
 import {
    EyeOutlined,
    ExclamationCircleOutlined,
@@ -16,6 +16,38 @@ import {
 } from '@ant-design/icons';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import FeedbackDisplay from './components/FeedbackDisplay';
+
+const { Step } = Steps;
+
+// Helper function để lấy thông tin driver
+const getDriverInfo = (driverId) => {
+   if (!driverId) return null;
+
+   // Nếu driverId đã có userId (từ OrderCard hoặc backend populate đầy đủ)
+   if (driverId.userId) {
+      return {
+         name: driverId.userId.name || "Tài xế",
+         phone: driverId.userId.phone || "N/A",
+         avatarUrl: driverId.userId.avatarUrl || driverId.avatarUrl,
+         rating: driverId.rating || "N/A",
+         totalTrips: driverId.totalTrips || 0
+      };
+   }
+
+   // Nếu driverId chỉ là string ID
+   if (typeof driverId === 'string') {
+      return null;
+   }
+
+   // Fallback: driverId là object nhưng chưa có userId
+   return {
+      name: "Tài xế",
+      phone: "N/A",
+      avatarUrl: driverId.avatarUrl,
+      rating: driverId.rating || "N/A",
+      totalTrips: driverId.totalTrips || 0
+   };
+};
 
 // Định nghĩa hàm renderOrderStatus
 const renderOrderStatus = (status) => {
@@ -36,8 +68,40 @@ const renderOrderStatus = (status) => {
    );
 };
 
+// Định nghĩa hàm renderOrderSteps
+const renderOrderSteps = (item) => {
+   const { status } = item;
+   let current = 0;
+
+   switch (status) {
+      case "Accepted":
+         current = 0;
+         break;
+      case "PickedUp":
+         current = 1;
+         break;
+      case "Delivering":
+         current = 2;
+         break;
+      case "Delivered":
+         current = 3;
+         break;
+      default:
+         current = 0;
+   }
+
+   return (
+      <Steps size="small" current={current} className="mt-4">
+         <Step title="Đã nhận đơn" description={item.acceptedAt ? formatDate(item.acceptedAt, true) : ""} />
+         <Step title="Đã lấy hàng" description={item.pickedUpAt ? formatDate(item.pickedUpAt, true) : ""} />
+         <Step title="Đang giao" />
+         <Step title="Đã giao hàng" description={item.deliveredAt ? formatDate(item.deliveredAt, true) : ""} />
+      </Steps>
+   );
+};
+
 const OrderDetailModal = ({
-   visible,
+   open,
    onClose,
    order,
    feedbacks,
@@ -55,7 +119,7 @@ const OrderDetailModal = ({
                <span>Chi tiết đơn hàng</span>
             </div>
          }
-         open={visible}
+         open={open}
          onCancel={onClose}
          footer={null}
          width={900}
@@ -167,42 +231,61 @@ const OrderDetailModal = ({
                            </Row>
                         </div>
 
-                        {/* Progress Steps */}
-                        {item.driverId && renderOrderSteps(item)}
+                        {/* Thông tin tài xế - Hiển thị luôn khi có driverId */}
+                        {(() => {
+                           const driverInfo = getDriverInfo(item.driverId);
+                           if (!driverInfo) return null;
 
-                        {/* Thông tin tài xế */}
-                        {item.driverId && (
-                           <div className="bg-gray-50 p-4 rounded-lg">
-                              <h4 className="font-medium mb-3">Thông tin tài xế</h4>
-                              <Row gutter={[16, 16]} align="middle">
-                                 <Col xs={24} sm={12}>
-                                    <div className="flex items-center space-x-3">
-                                       <Avatar src={item.driverId.avatarUrl} icon={<UserOutlined />} size="large" />
-                                       <div>
-                                          <div className="font-semibold text-lg">{item.driverId.userId?.name || "Tài xế"}</div>
-                                          <div className="flex items-center space-x-2">
-                                             <StarFilled className="text-yellow-500" />
-                                             <span className="font-medium">{item.driverId.rating || "N/A"}</span>
-                                             <span className="text-sm text-gray-500">({item.driverId.totalTrips || 0} chuyến)</span>
+                           return (
+                              <>
+                                 <div className="bg-gradient-to-br from-purple-50 to-indigo-50 rounded-xl p-4 border border-purple-100">
+                                    <h4 className="font-medium mb-3 text-purple-700">Thông tin tài xế</h4>
+                                    <Row gutter={[16, 16]} align="middle">
+                                       <Col xs={24} sm={12}>
+                                          <div className="flex items-center space-x-3">
+                                             <Avatar
+                                                src={driverInfo.avatarUrl}
+                                                icon={<UserOutlined />}
+                                                size={56}
+                                                className="border-2 border-white shadow-md"
+                                             />
+                                             <div>
+                                                <div className="font-semibold text-lg text-gray-800">
+                                                   {driverInfo.name}
+                                                </div>
+                                                <div className="flex items-center space-x-1">
+                                                   <StarFilled className="text-yellow-500 text-sm" />
+                                                   <span className="font-medium text-gray-700">
+                                                      {driverInfo.rating}
+                                                   </span>
+                                                   <span className="text-gray-400">•</span>
+                                                   <span className="text-sm text-gray-600">
+                                                      {driverInfo.totalTrips} chuyến
+                                                   </span>
+                                                </div>
+                                             </div>
                                           </div>
-                                       </div>
-                                    </div>
-                                 </Col>
-                                 <Col xs={24} sm={12}>
-                                    <div className="space-y-2">
-                                       <div className="flex items-center space-x-2">
-                                          <PhoneOutlined className="text-blue-500" />
-                                          <span>{item.driverId.userId?.phone || "N/A"}</span>
-                                       </div>
-                                       <div className="flex items-center space-x-2">
-                                          <TruckOutlined className="text-green-500" />
-                                          <span>{item.vehicleType}</span>
-                                       </div>
-                                    </div>
-                                 </Col>
-                              </Row>
-                           </div>
-                        )}
+                                       </Col>
+                                       <Col xs={24} sm={12}>
+                                          <div className="space-y-2">
+                                             <div className="flex items-center space-x-2">
+                                                <PhoneOutlined className="text-blue-500" />
+                                                <span className="text-gray-700">{driverInfo.phone}</span>
+                                             </div>
+                                             <div className="flex items-center space-x-2">
+                                                <TruckOutlined className="text-green-500" />
+                                                <span className="text-gray-700">{item.vehicleType}</span>
+                                             </div>
+                                          </div>
+                                       </Col>
+                                    </Row>
+                                 </div>
+
+                                 {/* Progress Steps - Hiển thị sau thông tin tài xế */}
+                                 {renderOrderSteps(item)}
+                              </>
+                           );
+                        })()}
 
                         {/* Chi phí chi tiết */}
                         <div className="bg-gray-50 p-4 rounded-lg">

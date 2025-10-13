@@ -192,11 +192,8 @@ export default function DriverOrders() {
             setSelectedOrder(response.data.data);
             setDetailModalVisible(true);
 
-            // Load feedback cho driver nếu có
-            const driverId = response.data.data.items?.find(item => item.driverId)?._id;
-            if (driverId) {
-               await loadDriverFeedbacks(driverId);
-            }
+            // Load feedback cho ĐƠN HÀNG này (không phải driver)
+            await loadOrderFeedbacks(orderId);
          } else {
             message.error("Không thể tải chi tiết đơn hàng");
          }
@@ -206,13 +203,13 @@ export default function DriverOrders() {
       }
    };
 
-   // Load feedback của driver
-   const loadDriverFeedbacks = async (driverId) => {
+   // Load feedback của đơn hàng
+   const loadOrderFeedbacks = async (orderId) => {
       setFeedbackLoading(true);
       try {
-         const response = await feedbackService.getDriverFeedbacks(driverId);
+         const response = await feedbackService.getOrderFeedbacks(orderId);
          if (response.data?.success) {
-            setFeedbacks(response.data.data);
+            setFeedbacks(response.data.data || []);
             setFeedbackStats(response.data.stats);
          }
       } catch (error) {
@@ -586,17 +583,7 @@ export default function DriverOrders() {
                                           >
                                              Xem chi tiết
                                           </Button>
-                                          {activeTab === 'completed' && (
-                                             <Button
-                                                type="default"
-                                                size="large"
-                                                className="w-full"
-                                                onClick={() => handleReportDriver(item.driverId)}
-                                                icon={<WarningOutlined />}
-                                             >
-                                                Báo cáo tài xế
-                                             </Button>
-                                          )}
+                                          {/* Tài xế không thể báo cáo chính mình - đã xóa nút */}
                                        </Space>
                                     </Col>
                                  </Row>
@@ -937,18 +924,7 @@ export default function DriverOrders() {
                                  </div>
                               )}
 
-                              {/* Nút báo cáo cho đơn đã hoàn thành */}
-                              {item.status === 'Delivered' && (
-                                 <div className="flex justify-end space-x-2">
-                                    <Button
-                                       danger
-                                       onClick={() => handleReportDriver(item.driverId)}
-                                       icon={<WarningOutlined />}
-                                    >
-                                       Báo cáo tài xế
-                                    </Button>
-                                 </div>
-                              )}
+                              {/* Tài xế không thể báo cáo chính mình - đã xóa nút */}
                            </div>
                         );
                      })}
@@ -956,11 +932,11 @@ export default function DriverOrders() {
 
                   {/* Feedback Section */}
                   {feedbacks.length > 0 && (
-                     <Card title="Đánh giá từ khách hàng" className="shadow-sm">
+                     <Card title="📝 Đánh giá từ khách hàng cho đơn hàng này" className="shadow-sm">
                         <FeedbackDisplay
                            feedbacks={feedbacks}
                            stats={feedbackStats}
-                           showStats={true}
+                           showStats={false}
                            loading={feedbackLoading}
                         />
                      </Card>

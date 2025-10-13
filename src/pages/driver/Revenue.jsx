@@ -1,51 +1,46 @@
-import { useMemo, useState } from "react";
-import { Card, Row, Col, Select, DatePicker, Statistic, Radio, Table } from "antd";
+import { useMemo, useState, useEffect } from "react";
+import { Card, Row, Col, Select, DatePicker, Statistic, Radio, Table, Spin, message } from "antd";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, LineChart, Line, Legend } from "recharts";
 import dayjs from "dayjs";
+import { revenueService } from "../../features/revenue/api/revenueService";
 
 const { RangePicker } = DatePicker;
-
-const MOCK_DATA = Array.from({ length: 12 }).map((_, i) => ({
-   key: i,
-   label: `Th${i + 1}`,
-   orders: Math.round(Math.random() * 80 + 20),
-   distanceKm: Math.round(Math.random() * 800 + 200),
-   revenue: Math.round(Math.random() * 40_000_000 + 10_000_000),
-   payout: Math.round(Math.random() * 30_000_000 + 7_000_000),
-}));
 
 export default function DriverRevenue() {
    const [range, setRange] = useState([dayjs().startOf("year"), dayjs().endOf("year")]);
    const [granularity, setGranularity] = useState("month"); // day | week | month | quarter | year
    const [preset, setPreset] = useState("year"); // week | month | quarter | year | custom
+   const [loading, setLoading] = useState(false);
+   const [data, setData] = useState([]);
+   const [totals, setTotals] = useState({ orders: 0, distanceKm: 0, revenue: 0, payout: 0 });
 
-   const data = useMemo(() => {
-      // Demo: dùng MOCK_DATA, thực tế fetch API theo range + granularity
-      switch (granularity) {
-         case "day":
-         case "week":
-            return MOCK_DATA.slice(0, 7).map((d, idx) => ({ ...d, label: `D${idx + 1}` }));
-         case "quarter":
-            return [1, 2, 3, 4].map((q) => ({ ...MOCK_DATA[q - 1], label: `Q${q}` }));
-         case "year":
-            return MOCK_DATA.slice(0, 5).map((d, idx) => ({ ...d, label: `${2019 + idx}` }));
-         default:
-            return MOCK_DATA;
-      }
+   // Fetch data từ API khi range hoặc granularity thay đổi
+   useEffect(() => {
+      const fetchRevenueData = async () => {
+         setLoading(true);
+         try {
+            const response = await revenueService.getStats({
+               startDate: range[0].toISOString(),
+               endDate: range[1].toISOString(),
+               granularity
+            });
+
+            if (response.data?.success) {
+               setData(response.data.data || []);
+               setTotals(response.data.totals || { orders: 0, distanceKm: 0, revenue: 0, payout: 0 });
+            } else {
+               message.error("Không thể tải dữ liệu doanh thu");
+            }
+         } catch (error) {
+            console.error("Lỗi khi tải doanh thu:", error);
+            message.error("Lỗi khi tải doanh thu: " + (error.response?.data?.message || error.message));
+         } finally {
+            setLoading(false);
+         }
+      };
+
+      fetchRevenueData();
    }, [range, granularity]);
-
-   const totals = useMemo(() => {
-      return data.reduce(
-         (acc, cur) => {
-            acc.orders += cur.orders;
-            acc.distanceKm += cur.distanceKm;
-            acc.revenue += cur.revenue;
-            acc.payout += cur.payout;
-            return acc;
-         },
-         { orders: 0, distanceKm: 0, revenue: 0, payout: 0 }
-      );
-   }, [data]);
 
    const formatCurrency = (v) =>
       new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", maximumFractionDigits: 0 }).format(v || 0);
@@ -57,6 +52,14 @@ export default function DriverRevenue() {
       { title: "Doanh thu", dataIndex: "revenue", key: "revenue", render: (v) => formatCurrency(v) },
       { title: "Thực nhận", dataIndex: "payout", key: "payout", render: (v) => formatCurrency(v) },
    ];
+
+   if (loading && data.length === 0) {
+      return (
+         <div className="flex justify-center items-center h-screen">
+            <Spin size="large" tip="Đang tải dữ liệu doanh thu..." />
+         </div>
+      );
+   }
 
    return (
       <div className="p-4">
@@ -111,59 +114,61 @@ export default function DriverRevenue() {
             </Col>
          </Row>
 
-         <Row gutter={[16, 16]} className="mt-2">
-            <Col xs={12} md={6}><Card><Statistic title="Số đơn" value={totals.orders} /></Card></Col>
-            <Col xs={12} md={6}><Card><Statistic title="Số km chạy" value={totals.distanceKm} /></Card></Col>
-            <Col xs={12} md={6}><Card><Statistic title="Doanh thu" value={totals.revenue} formatter={(v) => formatCurrency(v)} /></Card></Col>
-            <Col xs={12} md={6}><Card><Statistic title="Thực nhận" value={totals.payout} formatter={(v) => formatCurrency(v)} /></Card></Col>
-         </Row>
+         <Spin spinning={loading}>
+            <Row gutter={[16, 16]} className="mt-2">
+               <Col xs={12} md={6}><Card><Statistic title="Số đơn" value={totals.orders} /></Card></Col>
+               <Col xs={12} md={6}><Card><Statistic title="Số km chạy" value={totals.distanceKm} /></Card></Col>
+               <Col xs={12} md={6}><Card><Statistic title="Doanh thu" value={totals.revenue} formatter={(v) => formatCurrency(v)} /></Card></Col>
+               <Col xs={12} md={6}><Card><Statistic title="Thực nhận" value={totals.payout} formatter={(v) => formatCurrency(v)} /></Card></Col>
+            </Row>
 
-         <Row gutter={[16, 16]} className="mt-2">
-            <Col xs={24} lg={12}>
-               <Card title="Đơn theo thời gian">
-                  <div style={{ height: 280 }}>
-                     <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={data}>
-                           <CartesianGrid strokeDasharray="3 3" />
-                           <XAxis dataKey="label" />
-                           <YAxis />
-                           <Tooltip />
-                           <Legend />
-                           <Bar dataKey="orders" fill="#1e40af" name="Số đơn" />
-                        </BarChart>
-                     </ResponsiveContainer>
-                  </div>
-               </Card>
-            </Col>
-            <Col xs={24} lg={12}>
-               <Card title="Doanh thu & Thực nhận">
-                  <div style={{ height: 280 }}>
-                     <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={data}>
-                           <CartesianGrid strokeDasharray="3 3" />
-                           <XAxis dataKey="label" />
-                           <YAxis />
-                           <Tooltip />
-                           <Legend />
-                           <Line type="monotone" dataKey="revenue" stroke="#0ea5e9" name="Doanh thu" />
-                           <Line type="monotone" dataKey="payout" stroke="#059669" name="Thực nhận" />
-                        </LineChart>
-                     </ResponsiveContainer>
-                  </div>
-               </Card>
-            </Col>
-         </Row>
+            <Row gutter={[16, 16]} className="mt-2">
+               <Col xs={24} lg={12}>
+                  <Card title="Đơn theo thời gian">
+                     <div style={{ height: 280 }}>
+                        <ResponsiveContainer width="100%" height="100%">
+                           <BarChart data={data}>
+                              <CartesianGrid strokeDasharray="3 3" />
+                              <XAxis dataKey="label" />
+                              <YAxis />
+                              <Tooltip />
+                              <Legend />
+                              <Bar dataKey="orders" fill="#1e40af" name="Số đơn" />
+                           </BarChart>
+                        </ResponsiveContainer>
+                     </div>
+                  </Card>
+               </Col>
+               <Col xs={24} lg={12}>
+                  <Card title="Doanh thu & Thực nhận">
+                     <div style={{ height: 280 }}>
+                        <ResponsiveContainer width="100%" height="100%">
+                           <LineChart data={data}>
+                              <CartesianGrid strokeDasharray="3 3" />
+                              <XAxis dataKey="label" />
+                              <YAxis />
+                              <Tooltip />
+                              <Legend />
+                              <Line type="monotone" dataKey="revenue" stroke="#0ea5e9" name="Doanh thu" />
+                              <Line type="monotone" dataKey="payout" stroke="#059669" name="Thực nhận" />
+                           </LineChart>
+                        </ResponsiveContainer>
+                     </div>
+                  </Card>
+               </Col>
+            </Row>
 
-         <Card className="mt-2" title="Chi tiết theo mốc">
-            <div style={{ width: "100%", overflowX: "auto" }}>
-               <Table
-                  dataSource={data}
-                  columns={columns}
-                  rowKey={(r) => r.key}
-                  pagination={{ pageSize: 8, showSizeChanger: false }}
-               />
-            </div>
-         </Card>
+            <Card className="mt-2" title="Chi tiết theo mốc">
+               <div style={{ width: "100%", overflowX: "auto" }}>
+                  <Table
+                     dataSource={data}
+                     columns={columns}
+                     rowKey={(r) => r.label}
+                     pagination={{ pageSize: 8, showSizeChanger: false }}
+                  />
+               </div>
+            </Card>
+         </Spin>
       </div>
    );
 }

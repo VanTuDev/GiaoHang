@@ -27,7 +27,6 @@ import DriverDashboardLayout from "./layouts/DriverDashboardLayout";
 import DriverHome from "./pages/driver/Home";
 import DriverProfile from "./pages/driver/Profile";
 import DriverOrders from "./pages/driver/Orders";
-import DriverStatus from "./pages/driver/Status";
 import DriverChat from "./pages/driver/Chat";
 import DriverContact from "./pages/driver/Contact";
 import DriverRevenue from "./pages/driver/Revenue";
@@ -89,7 +88,6 @@ export default function App() {
                 <Route path="profile" element={<DriverProfile />} />
                 <Route path="orders" element={<DriverOrders />} />
                 <Route path="revenue" element={<DriverRevenue />} />
-                <Route path="status" element={<DriverStatus />} />
                 <Route path="vehicles" element={<VehicleManagement />} />
                 <Route path="chat" element={<DriverChat />} />
                 <Route path="contact" element={<DriverContact />} />
