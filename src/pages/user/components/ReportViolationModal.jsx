@@ -146,7 +146,7 @@ const ReportViolationModal = ({
          title={
             <div className="flex items-center">
                <ExclamationCircleOutlined className="text-red-500 mr-2" />
-               <span>Báo cáo vi phạm tài xế</span>
+               <span>Khách hàng Báo cáo vi phạm tài xế</span>
             </div>
          }
          open={open}
@@ -243,15 +243,33 @@ const ReportViolationModal = ({
             </Form.Item>
 
             {/* Upload ảnh chứng minh */}
-            <Form.Item label="Ảnh chứng minh (tùy chọn)">
-               <Upload {...uploadProps}>
-                  <Button icon={<UploadOutlined />}>
-                     Upload ảnh chứng minh
-                  </Button>
+            <Form.Item label={
+               <span>
+                  📸 Ảnh chứng minh (tùy chọn)
+                  <span className="text-xs text-gray-500 ml-2 font-normal">
+                     - Tối đa 5 ảnh, mỗi ảnh &lt; 2MB
+                  </span>
+               </span>
+            }>
+               <Upload
+                  {...uploadProps}
+                  listType="picture-card"
+                  maxCount={5}
+               >
+                  {fileList.length >= 5 ? null : (
+                     <div>
+                        <UploadOutlined />
+                        <div style={{ marginTop: 8 }}>Upload</div>
+                     </div>
+                  )}
                </Upload>
-               <p className="text-xs text-gray-500 mt-1">
-                  Tối đa 5 ảnh, mỗi ảnh dưới 2MB. Ảnh sẽ giúp admin xử lý báo cáo nhanh hơn.
-               </p>
+               <Alert
+                  message="💡 Mẹo"
+                  description="Ảnh chứng cứ rõ ràng sẽ giúp admin xử lý báo cáo nhanh hơn và chính xác hơn."
+                  type="info"
+                  showIcon
+                  className="mt-2"
+               />
             </Form.Item>
 
             {/* Nút submit */}
