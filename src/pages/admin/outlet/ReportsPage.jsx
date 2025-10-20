@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
    Card, Table, Tag, Button, Modal, Descriptions, Avatar, Image, Select, Input,
-   Row, Col, Statistic, message, Space, Badge, Divider, Form, InputNumber, Radio
+   Row, Col, Statistic, message, Space, Badge, Divider, Form, InputNumber, Radio, Alert
 } from 'antd';
 import {
    WarningOutlined,
@@ -97,7 +97,20 @@ export default function ReportsPage() {
          const response = await violationService.getAllViolations(params);
 
          if (response.data?.success) {
-            setViolations(response.data.data || []);
+            const violationsData = response.data.data || [];
+
+            // Debug: Log driver info
+            console.log('📋 Violations data:', violationsData);
+            violationsData.forEach((v, idx) => {
+               console.log(`Violation ${idx + 1}:`, {
+                  driverId: v.driverId,
+                  driverUserId: v.driverId?.userId,
+                  driverName: v.driverId?.userId?.name,
+                  driverPhone: v.driverId?.userId?.phone
+               });
+            });
+
+            setViolations(violationsData);
             setPagination({
                ...pagination,
                current: response.data.meta?.page || 1,
@@ -105,7 +118,7 @@ export default function ReportsPage() {
             });
 
             // Calculate stats
-            calculateStats(response.data.data || []);
+            calculateStats(violationsData);
          }
       } catch (error) {
          console.error('Lỗi khi tải báo cáo:', error);
@@ -143,7 +156,9 @@ export default function ReportsPage() {
          status: violation.status,
          adminNotes: violation.adminNotes || '',
          penalty: violation.penalty || 0,
-         warningCount: violation.warningCount || 0
+         warningCount: violation.warningCount || 0,
+         banDriver: false,
+         banDuration: undefined
       });
       setUpdateModalVisible(true);
    };
@@ -289,7 +304,7 @@ export default function ReportsPage() {
                   <div>
                      <h1 className="text-4xl font-bold text-white mb-2 flex items-center">
                         <WarningOutlined className="mr-3" />
-                        Quản lý báo cáo vi phạm
+                        Quản lý báo cáo vi phạm ADMIN
                      </h1>
                      <p className="text-red-100 text-lg">Xử lý các báo cáo vi phạm từ khách hàng</p>
                   </div>
@@ -564,17 +579,33 @@ export default function ReportsPage() {
                      {/* Photos */}
                      {selectedViolation.photos && selectedViolation.photos.length > 0 && (
                         <div className="mt-4">
-                           <h4 className="font-medium mb-2">Hình ảnh chứng minh:</h4>
-                           <div className="grid grid-cols-3 gap-4">
-                              {selectedViolation.photos.map((photo, index) => (
-                                 <Image
-                                    key={index}
-                                    src={photo}
-                                    alt={`Evidence ${index + 1}`}
-                                    className="rounded-lg"
-                                 />
-                              ))}
-                           </div>
+                           <h4 className="font-medium mb-2">
+                              📸 Hình ảnh chứng minh:
+                              <span className="text-sm text-gray-500 ml-2">
+                                 (Click vào ảnh để xem phóng to)
+                              </span>
+                           </h4>
+                           <Image.PreviewGroup>
+                              <div className="grid grid-cols-3 gap-4">
+                                 {selectedViolation.photos.map((photo, index) => (
+                                    <div key={index} className="relative group">
+                                       <Image
+                                          src={photo}
+                                          alt={`Chứng cứ ${index + 1}`}
+                                          className="rounded-lg object-cover w-full h-48 cursor-pointer hover:opacity-90 transition-opacity"
+                                          preview={{
+                                             mask: (
+                                                <div className="flex flex-col items-center">
+                                                   <EyeOutlined className="text-2xl mb-1" />
+                                                   <span>Xem ảnh {index + 1}</span>
+                                                </div>
+                                             )
+                                          }}
+                                       />
+                                    </div>
+                                 ))}
+                              </div>
+                           </Image.PreviewGroup>
                         </div>
                      )}
                   </Card>
@@ -652,12 +683,83 @@ export default function ReportsPage() {
                   <InputNumber min={0} max={10} style={{ width: '100%' }} />
                </Form.Item>
 
+               <Divider />
+
+               {/* Tùy chọn cấm tài xế */}
+               <Form.Item
+                  name="banDriver"
+                  label={
+                     <span className="text-red-600 font-semibold">
+                        ⚠️ Cấm tài khoản tài xế
+                     </span>
+                  }
+                  valuePropName="checked"
+               >
+                  <Radio.Group>
+                     <Radio value={false}>Không cấm</Radio>
+                     <Radio value={true}>
+                        <span className="text-red-600">Cấm tài xế</span>
+                     </Radio>
+                  </Radio.Group>
+               </Form.Item>
+
+               <Form.Item
+                  noStyle
+                  shouldUpdate={(prevValues, currentValues) =>
+                     prevValues.banDriver !== currentValues.banDriver
+                  }
+               >
+                  {({ getFieldValue }) =>
+                     getFieldValue('banDriver') === true ? (
+                        <Form.Item
+                           name="banDuration"
+                           label="Thời gian cấm"
+                           rules={[{ required: true, message: 'Vui lòng chọn thời gian cấm' }]}
+                        >
+                           <Select placeholder="Chọn thời gian cấm">
+                              <Select.Option value="7 ngày">7 ngày</Select.Option>
+                              <Select.Option value="15 ngày">15 ngày</Select.Option>
+                              <Select.Option value="30 ngày">30 ngày</Select.Option>
+                              <Select.Option value="3 tháng">3 tháng</Select.Option>
+                              <Select.Option value="6 tháng">6 tháng</Select.Option>
+                              <Select.Option value="1 năm">1 năm</Select.Option>
+                              <Select.Option value="Vĩnh viễn">
+                                 <span className="text-red-600 font-semibold">Vĩnh viễn</span>
+                              </Select.Option>
+                           </Select>
+                        </Form.Item>
+                     ) : null
+                  }
+               </Form.Item>
+
+               <Divider />
+
                <Form.Item
                   name="adminNotes"
                   label="Ghi chú xử lý"
                   rules={[{ required: true, message: 'Vui lòng nhập ghi chú' }]}
                >
                   <TextArea rows={4} placeholder="Nhập ghi chú về cách xử lý vi phạm này..." />
+               </Form.Item>
+
+               {/* Cảnh báo khi cấm tài xế */}
+               <Form.Item
+                  noStyle
+                  shouldUpdate={(prevValues, currentValues) =>
+                     prevValues.banDriver !== currentValues.banDriver
+                  }
+               >
+                  {({ getFieldValue }) =>
+                     getFieldValue('banDriver') === true ? (
+                        <Alert
+                           message="⚠️ Cảnh báo"
+                           description="Khi cấm tài xế, hệ thống sẽ tự động gửi email thông báo cho tài xế và khách hàng. Tài xế sẽ không thể nhận đơn hàng mới."
+                           type="error"
+                           showIcon
+                           className="mb-4"
+                        />
+                     ) : null
+                  }
                </Form.Item>
             </Form>
          </Modal>

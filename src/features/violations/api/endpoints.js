@@ -4,6 +4,6 @@ export const VIOLATION_ENDPOINTS = {
    adminUpdateStatus: (violationId) => `/api/violations/admin/${violationId}/status`,
 
    // Customer
-   reportViolation: '/api/violations',
+   reportViolation: '/api/violations/report',  // ✅ Đã sửa: thêm /report
    myReports: '/api/violations/my-reports',
 };
