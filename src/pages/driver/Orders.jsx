@@ -35,6 +35,7 @@ import {
    MessageOutlined
 } from '@ant-design/icons';
 import { orderService } from '../../features/orders/api/orderService';
+import { paymentsService } from '../../features/orders/api/paymentsService';
 import { feedbackService } from '../../features/feedback/api/feedbackService';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import FeedbackDisplay from '../user/components/FeedbackDisplay';
@@ -57,6 +58,14 @@ export default function DriverOrders() {
    const [modal, contextHolder] = Modal.useModal();
    const socketRef = useRef(null);
    const [socketConnected, setSocketConnected] = useState(false);
+
+   // Payment modal states
+   const [paymentModalVisible, setPaymentModalVisible] = useState(false);
+   const [paymentLoading, setPaymentLoading] = useState(false);
+   const [paymentUrl, setPaymentUrl] = useState('');
+   const [payOrderId, setPayOrderId] = useState(null);
+   const [payItemId, setPayItemId] = useState(null);
+   const [payAmount, setPayAmount] = useState(null);
 
    // Feedback states
    const [feedbacks, setFeedbacks] = useState([]);
@@ -262,6 +271,53 @@ export default function DriverOrders() {
          message.error("Lỗi khi cập nhật trạng thái đơn hàng: " + (error.response?.data?.message || error.message));
       } finally {
          setUpdatingStatus(false);
+      }
+   };
+
+   // Mở modal thanh toán VNPay (tạo URL + hiển thị QR)
+   const handleOpenPayment = async (order, item) => {
+      try {
+         setPaymentLoading(true);
+         setPayOrderId(order._id);
+         setPayItemId(item._id);
+         const amount = item?.priceBreakdown?.total || 0;
+         setPayAmount(amount);
+         const resp = await paymentsService.createVnPayUrl({
+            orderId: order._id,
+            orderItemId: item._id,
+            amount,
+         });
+         if (resp.data?.success && resp.data.paymentUrl) {
+            setPaymentUrl(resp.data.paymentUrl);
+            setPaymentModalVisible(true);
+         } else {
+            message.error('Không tạo được mã thanh toán');
+         }
+      } catch (e) {
+         message.error('Lỗi tạo URL thanh toán: ' + (e.response?.data?.message || e.message));
+      } finally {
+         setPaymentLoading(false);
+      }
+   };
+
+   // Sau khi khách thanh toán, tài xế bấm kiểm tra và xác nhận
+   const handleConfirmPaid = async () => {
+      if (!payOrderId || !payItemId) return;
+      try {
+         // Refetch chi tiết đơn để xem IPN đã cập nhật Delivered chưa
+         const res = await orderService.getOrderDetail(payOrderId);
+         const ord = res.data?.data;
+         const item = ord?.items?.find((i) => String(i._id) === String(payItemId));
+         if (item?.status === 'Delivered') {
+            message.success('Thanh toán đã xác nhận. Đơn đã giao xong.');
+            setPaymentModalVisible(false);
+            setDetailModalVisible(false);
+            setActiveTab('completed');
+         } else {
+            message.info('Chưa nhận IPN từ VNPay. Vui lòng đợi vài giây và thử lại.');
+         }
+      } catch (e) {
+         message.error('Lỗi kiểm tra thanh toán: ' + (e.response?.data?.message || e.message));
       }
    };
 
@@ -915,11 +971,11 @@ export default function DriverOrders() {
                                        type="primary"
                                        size="large"
                                        className="bg-green-600 hover:bg-green-700"
-                                       onClick={() => handleUpdateStatus(selectedOrder._id, item._id, 'Delivered')}
-                                       loading={updatingStatus}
+                                       onClick={() => handleOpenPayment(selectedOrder, item)}
+                                       loading={paymentLoading}
                                        icon={<TrophyOutlined />}
                                     >
-                                       Hoàn thành giao hàng
+                                       Giao hàng thành công (Hiện QR)
                                     </Button>
                                  </div>
                               )}
@@ -956,6 +1012,48 @@ export default function DriverOrders() {
                setReportModalVisible(false);
             }}
          />
+
+         {/* Modal thanh toán VNPay - hiển thị QR từ paymentUrl */}
+         <Modal
+            title={
+               <div className="flex items-center space-x-2">
+                  <DollarOutlined className="text-green-500" />
+                  <span>Thanh toán qua VNPay</span>
+               </div>
+            }
+            open={paymentModalVisible}
+            onCancel={() => setPaymentModalVisible(false)}
+            footer={null}
+            width={520}
+         >
+            <div className="text-center space-y-4">
+               <div>
+                  <div className="text-sm text-gray-600 mb-2">Số tiền cần thanh toán</div>
+                  <div className="text-2xl font-bold text-green-600">{payAmount ? formatCurrency(payAmount) : '--'}</div>
+               </div>
+               {paymentUrl ? (
+                  <div className="flex flex-col items-center">
+                     <img
+                        alt="QR VNPay"
+                        className="rounded-lg border"
+                        width={240}
+                        height={240}
+                        src={`https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(paymentUrl)}&size=240x240`}
+                     />
+                     <div className="text-xs text-gray-500 mt-2">Khách hàng quét QR để thanh toán</div>
+                     <Space className="mt-4">
+                        <Button type="default" onClick={() => window.open(paymentUrl, '_blank')}>Mở VNPay</Button>
+                        <Button type="primary" className="bg-green-600" onClick={handleConfirmPaid}>Đã nhận thanh toán</Button>
+                     </Space>
+                  </div>
+               ) : (
+                  <div className="py-10">
+                     <Spin />
+                     <div className="text-xs text-gray-500 mt-2">Đang tạo mã thanh toán...</div>
+                  </div>
+               )}
+            </div>
+         </Modal>
 
          {contextHolder}
       </div>

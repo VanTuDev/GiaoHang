@@ -123,6 +123,7 @@ export default function VehicleManagement() {
          type: vehicle.type,
          licensePlate: vehicle.licensePlate,
          maxWeightKg: vehicle.maxWeightKg,
+         pricePerKm: vehicle.pricePerKm,
          description: vehicle.description,
          status: vehicle.status || 'Active'
       });
@@ -194,7 +195,7 @@ export default function VehicleManagement() {
          }
 
          // Chuẩn bị dữ liệu
-         const vehicleData = {
+        const vehicleData = {
             ...values,
             photoUrl
          };
@@ -409,6 +410,9 @@ export default function VehicleManagement() {
                                     </p>
                                     <p className="text-gray-600">
                                        <span className="font-medium">Trọng tải:</span> {vehicle.maxWeightKg?.toLocaleString() || "N/A"} kg
+                                    </p>
+                                    <p className="text-gray-600">
+                                       <span className="font-medium">Giá/km:</span> {vehicle.pricePerKm ? formatCurrency(vehicle.pricePerKm) : '—'} / km
                                     </p>
                                     {vehicle.description && (
                                        <p className="text-gray-500 text-sm italic">{vehicle.description}</p>
@@ -628,6 +632,25 @@ export default function VehicleManagement() {
                   rules={[{ required: true, message: 'Vui lòng nhập trọng tải tối đa' }]}
                >
                   <Input type="number" placeholder="VD: 1000" size="large" />
+               </Form.Item>
+
+               <Form.Item
+                  name="pricePerKm"
+                  label={<span className="font-medium">Giá / km (VND)</span>}
+                  tooltip="Giá bạn mong muốn cho mỗi km vận chuyển"
+                  rules={[
+                     { required: true, message: 'Vui lòng nhập giá mỗi km' },
+                     {
+                        validator: (_, value) => {
+                           if (value === undefined || value === null || value === '') return Promise.reject('Vui lòng nhập giá');
+                           const n = Number(value);
+                           if (Number.isNaN(n) || n <= 0) return Promise.reject('Giá phải > 0');
+                           return Promise.resolve();
+                        }
+                     }
+                  ]}
+               >
+                  <Input type="number" placeholder="VD: 40000" size="large" />
                </Form.Item>
 
                <Form.Item

@@ -301,7 +301,7 @@ export default function ReportsPage() {
          <div className="mb-6">
             <div className="bg-gradient-to-r from-red-600 to-orange-600 rounded-2xl p-8 shadow-xl">
                <div className="flex items-center justify-between">
-                  <div>
+      <div>
                      <h1 className="text-4xl font-bold text-white mb-2 flex items-center">
                         <WarningOutlined className="mr-3" />
                         Quản lý báo cáo vi phạm ADMIN

@@ -23,4 +23,7 @@ export const driverService = {
 
    // Upload avatar
    uploadAvatar: (data) => axiosClient.post(DRIVER_ENDPOINTS.uploadAvatar, data),
+
+  // Cập nhật thông tin ngân hàng
+  updateBank: (data) => axiosClient.put(DRIVER_ENDPOINTS.updateBank, data),
 };

@@ -1,3 +1,7 @@
+export const PAYMENTS_ENDPOINTS = {
+  createVnPayUrl: '/api/payments/vnpay/create',
+};
+
 export const ORDER_ENDPOINTS = {
    // Customer
    createOrder: "/api/orders",
