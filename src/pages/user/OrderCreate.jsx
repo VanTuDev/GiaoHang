@@ -226,6 +226,8 @@ export default function OrderCreate() {
             paymentMethod: "Cash", // Mặc định là tiền mặt
             items: orderItems.map(item => ({
                vehicleType: item.vehicleType,
+               vehicleId: item.vehicleId, // Gửi vehicleId để backend có thể lấy pricePerKm
+               pricePerKm: item.vehicleInfo?.pricePerKm || null, // Gửi pricePerKm từ xe đã chọn
                weightKg: item.weightKg,
                distanceKm: item.distanceKm,
                loadingService: item.loadingService,
@@ -234,8 +236,52 @@ export default function OrderCreate() {
             }))
          };
 
+         console.log('\n🚀 [FRONTEND] ========== GỬI ĐƠN HÀNG ==========');
+         console.log('📤 [FRONTEND] Order data sẽ gửi:', {
+            pickupAddress,
+            dropoffAddress,
+            itemsCount: orderData.items.length,
+            items: orderData.items.map((item, idx) => ({
+               index: idx + 1,
+               vehicleType: item.vehicleType,
+               vehicleTypeType: typeof item.vehicleType,
+               weightKg: item.weightKg,
+               weightKgType: typeof item.weightKg,
+               distanceKm: item.distanceKm,
+               loadingService: item.loadingService,
+               insurance: item.insurance
+            }))
+         });
+         console.log('📋 [FRONTEND] Chi tiết từng item trong orderItems:', orderItems.map((item, idx) => ({
+            index: idx + 1,
+            vehicleId: item.vehicleId,
+            vehicleType: item.vehicleType,
+            vehicleInfo: item.vehicleInfo ? {
+               _id: item.vehicleInfo._id,
+               type: item.vehicleInfo.type,
+               maxWeightKg: item.vehicleInfo.maxWeightKg,
+               pricePerKm: item.vehicleInfo.pricePerKm,
+               status: item.vehicleInfo.status
+            } : null,
+            weightKg: item.weightKg,
+            distanceKm: item.distanceKm
+         })));
+
          // Gửi đơn hàng
+         console.log('📡 [FRONTEND] Đang gọi API createOrder...');
          const response = await orderService.createOrder(orderData);
+         console.log('📥 [FRONTEND] Response từ API:', {
+            success: response.data?.success,
+            orderId: response.data?.data?._id,
+            orderStatus: response.data?.data?.status,
+            items: response.data?.data?.items?.map(item => ({
+               vehicleType: item.vehicleType,
+               weightKg: item.weightKg,
+               status: item.status,
+               driverId: item.driverId
+            }))
+         });
+         console.log('✅ [FRONTEND] ===========================================\n');
 
          if (response.data?.success) {
             message.success("Đặt đơn hàng thành công");

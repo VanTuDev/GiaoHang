@@ -9,7 +9,8 @@ import {
    StarFilled,
    EyeOutlined,
    StarOutlined,
-   WarningOutlined
+   WarningOutlined,
+   CloseCircleOutlined
 } from '@ant-design/icons';
 import { formatCurrency, formatDate } from '../../../utils/formatters';
 
@@ -22,10 +23,12 @@ const statusConfig = {
    Cancelled: { label: "Đã hủy", color: "red", icon: <ClockCircleOutlined /> },
 };
 
-export default function OrderCard({ order, onViewDetail, onOpenFeedback, onOpenReport }) {
+export default function OrderCard({ order, onViewDetail, onOpenFeedback, onOpenReport, onCancelOrder }) {
    const hasDeliveredItems = order.items.some(item => item.status === 'Delivered');
    const hasDriver = order.items.some(item => item.status === 'Delivered' && item.driverId);
    const activeDriver = order.items.find(item => item.driverId)?.driverId;
+   // Kiểm tra xem có thể hủy đơn không (tất cả items phải có status = 'Created')
+   const canCancel = order.items.every(item => item.status === 'Created');
 
    const getBorderColor = () => {
       if (hasDeliveredItems) return 'border-l-green-500';
@@ -173,15 +176,27 @@ export default function OrderCard({ order, onViewDetail, onOpenFeedback, onOpenR
          )}
 
          {/* Actions */}
-         <div className="flex items-center justify-end pt-3 border-t border-gray-200">
-            <Button
-               type="primary"
-               icon={<EyeOutlined />}
-               onClick={() => onViewDetail(order._id, activeDriver)}
-               className="bg-blue-600 hover:bg-blue-700"
-            >
-               Xem chi tiết
-            </Button>
+         <div className="flex items-center justify-between pt-3 border-t border-gray-200">
+            {canCancel && onCancelOrder && (
+               <Button
+                  danger
+                  icon={<CloseCircleOutlined />}
+                  onClick={() => onCancelOrder(order._id)}
+                  className="border-red-500 text-red-500 hover:bg-red-50"
+               >
+                  Hủy đơn hàng
+               </Button>
+            )}
+            <div className={canCancel && onCancelOrder ? '' : 'ml-auto'}>
+               <Button
+                  type="primary"
+                  icon={<EyeOutlined />}
+                  onClick={() => onViewDetail(order._id, activeDriver)}
+                  className="bg-blue-600 hover:bg-blue-700"
+               >
+                  Xem chi tiết
+               </Button>
+            </div>
          </div>
       </Card>
    );

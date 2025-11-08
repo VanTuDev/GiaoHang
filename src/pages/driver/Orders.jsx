@@ -57,6 +57,7 @@ export default function DriverOrders() {
    const [updatingStatus, setUpdatingStatus] = useState(false);
    const [modal, contextHolder] = Modal.useModal();
    const socketRef = useRef(null);
+   const activeTabRef = useRef(activeTab); // Lưu tab hiện tại để socket có thể check
    const [socketConnected, setSocketConnected] = useState(false);
 
    // Payment modal states
@@ -74,19 +75,71 @@ export default function DriverOrders() {
    const [reportModalVisible, setReportModalVisible] = useState(false);
    const [selectedDriverForReport, setSelectedDriverForReport] = useState(null);
 
+   // Cập nhật ref khi activeTab thay đổi
+   useEffect(() => {
+      activeTabRef.current = activeTab;
+   }, [activeTab]);
+
+   // Hàm refetch danh sách đơn có sẵn
+   const refetchAvailableOrders = async () => {
+      try {
+         console.log('\n🔄 [FRONTEND] ========== REFETCH ĐƠN CÓ SẴN ==========');
+         console.log('📤 [FRONTEND] Gọi API getAvailableOrders...');
+         const response = await orderService.getAvailableOrders();
+         console.log('📥 [FRONTEND] Response từ API:', {
+            success: response.data?.success,
+            dataCount: response.data?.data?.length || 0,
+            meta: response.data?.meta,
+            data: response.data?.data
+         });
+         if (response.data?.success) {
+            setAvailableOrders(response.data.data || []);
+            // Cập nhật count
+            const total = response.data?.meta?.total || response.data.data?.length || 0;
+            setCounts((c) => ({ ...c, available: total }));
+            console.log('✅ [FRONTEND] Đã cập nhật state:', {
+               availableOrdersCount: response.data.data?.length || 0,
+               total: total
+            });
+         } else {
+            console.log('❌ [FRONTEND] API trả về success: false');
+         }
+         console.log('✅ [FRONTEND] ===========================================\n');
+      } catch (error) {
+         console.error("❌ [FRONTEND] Lỗi khi tải lại danh sách đơn có sẵn:", error);
+      }
+   };
+
    // Tải danh sách đơn hàng
    useEffect(() => {
       const fetchOrders = async () => {
+         console.log('\n🚀 [FRONTEND] ========== FETCH ĐƠN HÀNG ==========');
+         console.log('📋 [FRONTEND] Active tab:', activeTab);
          setLoading(true);
          setError(null);
 
          try {
             if (activeTab === 'available') {
                // Tải danh sách đơn hàng có sẵn để nhận
+               console.log('📤 [FRONTEND] Gọi API getAvailableOrders...');
                const response = await orderService.getAvailableOrders();
+               console.log('📥 [FRONTEND] Response từ API getAvailableOrders:', {
+                  success: response.data?.success,
+                  dataCount: response.data?.data?.length || 0,
+                  meta: response.data?.meta,
+                  data: response.data?.data
+               });
                if (response.data?.success) {
                   setAvailableOrders(response.data.data || []);
+                  // Cập nhật count
+                  const total = response.data?.meta?.total || response.data.data?.length || 0;
+                  setCounts((c) => ({ ...c, available: total }));
+                  console.log('✅ [FRONTEND] Đã cập nhật state availableOrders:', {
+                     count: response.data.data?.length || 0,
+                     total: total
+                  });
                } else {
+                  console.log('❌ [FRONTEND] API trả về success: false');
                   setError("Không thể tải danh sách đơn hàng có sẵn");
                }
             } else {
@@ -113,6 +166,21 @@ export default function DriverOrders() {
       };
 
       fetchOrders();
+
+      // Nếu đang ở tab "available", thêm interval polling mỗi 10 giây để đảm bảo data luôn fresh
+      let intervalId = null;
+      if (activeTab === 'available') {
+         intervalId = setInterval(() => {
+            console.log('🔄 Auto-refresh đơn có sẵn...');
+            refetchAvailableOrders();
+         }, 10000); // 10 giây
+      }
+
+      return () => {
+         if (intervalId) {
+            clearInterval(intervalId);
+         }
+      };
    }, [activeTab]);
 
    // Xác định xem tài xế có thể báo cáo tài xế khác không
@@ -174,24 +242,35 @@ export default function DriverOrders() {
       });
 
       socket.on('order:available:new', (payload) => {
-         // Thông báo và cập nhật danh sách đơn có sẵn
+         console.log('\n📨 [FRONTEND] ========== NHẬN SOCKET EVENT ==========');
+         console.log('📥 [FRONTEND] Socket event: order:available:new', payload);
+         console.log('📋 [FRONTEND] Active tab hiện tại:', activeTabRef.current);
+
+         // Thông báo có đơn hàng mới
          message.info({
-            content: 'Có đơn hàng mới! Vào tab "Đơn có sẵn" để nhận.',
+            content: 'Có đơn hàng mới! Đang tải danh sách...',
             duration: 3
          });
 
-         // Chỉ thêm khung đơn mới tối thiểu (id, địa chỉ, tổng tiền) nếu đang ở tab available thì refetch
-         setAvailableOrders((prev) => prev);
-         // Nếu đang ở tab khác, tăng badge bằng cách kích hoạt refetch khi chuyển tab
-         // Không refetch tức thời để tránh spam API; người dùng chuyển tab sẽ tải mới
-         setCounts((c) => ({ ...c, available: (c.available || 0) + 1 }));
+         // Luôn refetch để đảm bảo có data mới nhất
+         // Kiểm tra tab hiện tại và tự động refetch nếu đang ở tab "available"
+         if (activeTabRef.current === 'available') {
+            // Tự động refetch để hiển thị đơn mới ngay lập tức
+            console.log('🔄 [FRONTEND] Đang ở tab "available", refetch ngay...');
+            refetchAvailableOrders();
+         } else {
+            // Nếu đang ở tab khác, tăng badge count và vẫn refetch để cập nhật count chính xác
+            console.log('📊 [FRONTEND] Đang ở tab khác, refetch để cập nhật count...');
+            refetchAvailableOrders(); // Vẫn refetch để cập nhật count chính xác
+         }
+         console.log('✅ [FRONTEND] ===========================================\n');
       });
 
       return () => {
          try { socket.disconnect(); } catch { }
          socketRef.current = null;
       };
-   }, []);
+   }, []); // Chỉ chạy một lần khi mount
 
    // Xem chi tiết đơn hàng
    const handleViewDetail = async (orderId) => {
@@ -239,11 +318,23 @@ export default function DriverOrders() {
       try {
          const response = await orderService.acceptItem(orderId, itemId);
          if (response.data?.success) {
-            message.success("Nhận đơn hàng thành công");
-            // Cập nhật lại danh sách
+            message.success("Nhận đơn hàng thành công! Đơn đã được chuyển sang tab 'Đơn đang giao'");
+
+            // Cập nhật lại danh sách đơn có sẵn (xóa item vừa nhận)
+            if (activeTab === 'available') {
+               await refetchAvailableOrders();
+            }
+
+            // Chuyển sang tab "active" để xem đơn vừa nhận
             setActiveTab('active');
+
+            // Refetch lại danh sách đơn đang giao để hiển thị đơn mới nhận
+            const statusResponse = await orderService.getDriverOrders({ status: 'Accepted,PickedUp,Delivering' });
+            if (statusResponse.data?.success) {
+               setOrders(statusResponse.data.data || []);
+            }
          } else {
-            message.error("Không thể nhận đơn hàng");
+            message.error(response.data?.message || "Không thể nhận đơn hàng");
          }
       } catch (error) {
          console.error("Lỗi khi nhận đơn hàng:", error);
@@ -466,9 +557,9 @@ export default function DriverOrders() {
                            </Row>
                         </div>
 
-                        {/* Items */}
+                        {/* Items - Chỉ hiển thị items có thể nhận (status = Created và chưa có driverId) */}
                         <div className="space-y-3">
-                           {order.items.filter(item => item.status === 'Created').map((item) => (
+                           {order.items.filter(item => item.status === 'Created' && !item.driverId).map((item) => (
                               <div key={item._id} className="bg-blue-50 p-4 rounded-lg border border-blue-200">
                                  <Row gutter={[16, 8]} align="middle">
                                     <Col xs={24} sm={16}>
@@ -660,7 +751,7 @@ export default function DriverOrders() {
          <div className="bg-gradient-to-r from-blue-500 to-blue-600 p-6 rounded-lg text-white">
             <div className="flex items-center justify-between">
                <div>
-                  <h1 className="text-3xl font-bold mb-2">Quản lý đơn hàng</h1>
+                  <h1 className="text-3xl font-bold mb-2">Quản lý đơn hàng của tài xế</h1>
                   <p className="text-blue-100">Theo dõi và quản lý các đơn hàng của bạn</p>
                </div>
                <div className="text-right">
