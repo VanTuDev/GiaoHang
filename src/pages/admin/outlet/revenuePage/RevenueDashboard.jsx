@@ -1,6 +1,6 @@
-import { useState } from "react";
-import { Card, Tabs, Select, Badge, Row, Col } from "antd";
-import { DollarOutlined, RiseOutlined, CarOutlined, StockOutlined, FilterOutlined } from "@ant-design/icons";
+import { useState, useEffect } from "react";
+import { Card, Tabs, Select, Badge, Row, Col, Spin, message, Table, Avatar, Tag } from "antd";
+import { DollarOutlined, RiseOutlined, CarOutlined, StockOutlined, UserOutlined } from "@ant-design/icons";
 import {
    LineChart,
    Line,
@@ -18,49 +18,116 @@ import {
    Legend,
    ResponsiveContainer,
 } from "recharts";
-
-// Mock data (JSX-ready, không dùng TS types)
-const revenueData = [
-   { month: "T1", systemRevenue: 45000000, driverRevenue: 120000000, adRevenue: 8000000 },
-   { month: "T2", systemRevenue: 52000000, driverRevenue: 135000000, adRevenue: 9500000 },
-   { month: "T3", systemRevenue: 48000000, driverRevenue: 128000000, adRevenue: 7800000 },
-   { month: "T4", systemRevenue: 61000000, driverRevenue: 155000000, adRevenue: 11200000 },
-   { month: "T5", systemRevenue: 58000000, driverRevenue: 148000000, adRevenue: 10800000 },
-   { month: "T6", systemRevenue: 67000000, driverRevenue: 172000000, adRevenue: 12500000 },
-];
-
-const dailyData = [
-   { day: "T2", revenue: 2800000, orders: 145 },
-   { day: "T3", revenue: 3200000, orders: 167 },
-   { day: "T4", revenue: 2950000, orders: 152 },
-   { day: "T5", revenue: 3800000, orders: 198 },
-   { day: "T6", revenue: 4200000, orders: 215 },
-   { day: "T7", revenue: 3900000, orders: 201 },
-   { day: "CN", revenue: 3500000, orders: 178 },
-];
-
-const driverCommissionData = [
-   { name: "Hoa hồng tài xế", value: 85, color: "#8884d8" },
-   { name: "Doanh thu hệ thống", value: 15, color: "#82ca9d" },
-];
-
-const adRevenueData = [
-   { category: "Banner quảng cáo", revenue: 4500000 },
-   { category: "Quảng cáo video", revenue: 3200000 },
-   { category: "Sponsored rides", revenue: 2800000 },
-   { category: "Partner promotion", revenue: 1500000 },
-];
+import { adminService } from "../../../../features/admin/api/adminService";
 
 export default function RevenueDashboard() {
    const [timeFilter, setTimeFilter] = useState("month");
+   const [loading, setLoading] = useState(false);
+   const [revenueData, setRevenueData] = useState([]);
+   const [totals, setTotals] = useState({
+      totalDriverRevenue: 0,
+      totalSystemRevenue: 0,
+      totalDriverPayout: 0,
+      totalOrders: 0
+   });
+   const [driversWithRevenue, setDriversWithRevenue] = useState([]);
+   const [loadingDrivers, setLoadingDrivers] = useState(false);
+
+   useEffect(() => {
+      fetchRevenueData();
+      fetchDriversWithRevenue();
+   }, [timeFilter]);
+
+   const fetchRevenueData = async () => {
+      setLoading(true);
+      try {
+         const response = await adminService.getSystemRevenueStats({
+            period: timeFilter
+         });
+
+         if (response.data.success) {
+            const data = response.data.data || [];
+            const totalsData = response.data.totals || {};
+
+            // Format data cho charts
+            const formattedData = data.map(item => ({
+               month: item.label,
+               // Tổng tiền tài xế thu nhập
+               driverRevenue: item.totalDriverRevenue || 0,
+               // Doanh thu hệ thống (20% phí)
+               systemRevenue: item.totalSystemRevenue || 0,
+               // Tiền tài xế thực nhận (80%)
+               driverPayout: item.totalDriverPayout || 0,
+               orders: item.totalOrders || 0
+            }));
+
+            setRevenueData(formattedData);
+            setTotals(totalsData);
+         } else {
+            message.error('Lỗi khi lấy dữ liệu doanh thu');
+         }
+      } catch (error) {
+         console.error('Lỗi khi lấy dữ liệu doanh thu:', error);
+         message.error('Lỗi khi lấy dữ liệu doanh thu');
+      } finally {
+         setLoading(false);
+      }
+   };
+
+   const fetchDriversWithRevenue = async () => {
+      setLoadingDrivers(true);
+      try {
+         const response = await adminService.getDriversWithRevenue({
+            status: 'Active',
+            limit: 50,
+            sortBy: 'totalRevenue',
+            sortOrder: 'desc'
+         });
+
+         if (response.data.success) {
+            setDriversWithRevenue(response.data.data || []);
+         } else {
+            message.error('Lỗi khi lấy danh sách tài xế');
+         }
+      } catch (error) {
+         console.error('Lỗi khi lấy danh sách tài xế:', error);
+         message.error('Lỗi khi lấy danh sách tài xế');
+      } finally {
+         setLoadingDrivers(false);
+      }
+   };
 
    const formatCurrency = (value) =>
       new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND", minimumFractionDigits: 0 }).format(value);
 
-   const totalSystemRevenue = revenueData.reduce((sum, item) => sum + item.systemRevenue, 0);
-   const totalDriverRevenue = revenueData.reduce((sum, item) => sum + item.driverRevenue, 0);
-   const totalAdRevenue = revenueData.reduce((sum, item) => sum + item.adRevenue, 0);
-   const totalRevenue = totalSystemRevenue + totalDriverRevenue + totalAdRevenue;
+   // Tính toán từ totals
+   const totalDriverRevenue = totals.totalDriverRevenue || 0;  // Tổng tiền tài xế thu nhập
+   const totalSystemRevenue = totals.totalSystemRevenue || 0;  // Doanh thu hệ thống (20%)
+   const totalDriverPayout = totals.totalDriverPayout || 0;     // Tiền tài xế thực nhận (80%)
+   const totalRevenue = totalDriverRevenue;  // Tổng doanh thu = tổng tiền tài xế thu nhập
+
+   // Data cho pie chart: Phân bổ 20% hệ thống và 80% tài xế
+   const driverCommissionData = [
+      { name: "Tiền tài xế (80%)", value: 80, color: "#8884d8", amount: totalDriverPayout },
+      { name: "Doanh thu hệ thống (20%)", value: 20, color: "#82ca9d", amount: totalSystemRevenue },
+   ];
+
+   // Daily data (lấy từ revenueData nếu period = 'day')
+   const dailyData = timeFilter === 'day'
+      ? revenueData.map(item => ({
+         day: item.month,
+         revenue: item.driverRevenue,
+         orders: item.orders
+      }))
+      : [
+         { day: "T2", revenue: 0, orders: 0 },
+         { day: "T3", revenue: 0, orders: 0 },
+         { day: "T4", revenue: 0, orders: 0 },
+         { day: "T5", revenue: 0, orders: 0 },
+         { day: "T6", revenue: 0, orders: 0 },
+         { day: "T7", revenue: 0, orders: 0 },
+         { day: "CN", revenue: 0, orders: 0 },
+      ];
 
    const tabItems = [
       {
@@ -78,9 +145,8 @@ export default function RevenueDashboard() {
                               <YAxis tickFormatter={(v) => `${Math.round(v / 1_000_000)}M`} />
                               <Tooltip formatter={(v) => formatCurrency(v)} />
                               <Legend />
-                              <Area type="monotone" dataKey="systemRevenue" stackId="1" stroke="#1677ff" fill="#1677ff" name="Hệ thống" />
-                              <Area type="monotone" dataKey="driverRevenue" stackId="1" stroke="#52c41a" fill="#52c41a" name="Tài xế" />
-                              <Area type="monotone" dataKey="adRevenue" stackId="1" stroke="#faad14" fill="#faad14" name="Quảng cáo" />
+                              <Area type="monotone" dataKey="systemRevenue" stackId="1" stroke="#1677ff" fill="#1677ff" name="Hệ thống (20%)" />
+                              <Area type="monotone" dataKey="driverPayout" stackId="1" stroke="#52c41a" fill="#52c41a" name="Tài xế (80%)" />
                            </AreaChart>
                         </ResponsiveContainer>
                      </div>
@@ -113,17 +179,25 @@ export default function RevenueDashboard() {
          children: (
             <Row gutter={[16, 16]}>
                <Col xs={24} lg={12}>
-                  <Card title="Phân bổ hoa hồng tài xế">
-                     <div style={{ width: "100%,", height: 300 }}>
+                  <Card title="Phân bổ doanh thu">
+                     <div style={{ width: "100%", height: 300 }}>
                         <ResponsiveContainer>
                            <PieChart>
-                              <Pie data={driverCommissionData} cx="50%" cy="50%" outerRadius={80} dataKey="value"
-                                 label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
+                              <Pie
+                                 data={driverCommissionData}
+                                 cx="50%"
+                                 cy="50%"
+                                 outerRadius={80}
+                                 dataKey="value"
+                                 label={({ name, percent, amount }) => `${name} ${(percent * 100).toFixed(0)}%`}>
                                  {driverCommissionData.map((e, i) => (
                                     <Cell key={i} fill={e.color} />
                                  ))}
                               </Pie>
-                              <Tooltip />
+                              <Tooltip formatter={(value, name, props) => [
+                                 formatCurrency(props.payload.amount),
+                                 props.payload.name
+                              ]} />
                            </PieChart>
                         </ResponsiveContainer>
                      </div>
@@ -132,39 +206,20 @@ export default function RevenueDashboard() {
                <Col xs={24} lg={12}>
                   <Card title="Chỉ số tài xế" className="space-y-3">
                      <div className="flex justify-between items-center p-3 bg-gray-50 rounded">
-                        <span>Tổng tiền tài xế nhận</span>
+                        <span>Tổng tiền tài xế thu nhập</span>
                         <Badge color="green" text={formatCurrency(totalDriverRevenue)} />
                      </div>
                      <div className="flex justify-between items-center p-3 bg-gray-50 rounded">
-                        <span>Hoa hồng trung bình</span>
-                        <Badge color="blue" text="85%" />
+                        <span>Tiền tài xế thực nhận (80%)</span>
+                        <Badge color="blue" text={formatCurrency(totalDriverPayout)} />
                      </div>
                      <div className="flex justify-between items-center p-3 bg-gray-50 rounded">
-                        <span>Số tài xế hoạt động</span>
-                        <Badge color="purple" text="1,247" />
+                        <span>Doanh thu hệ thống (20%)</span>
+                        <Badge color="purple" text={formatCurrency(totalSystemRevenue)} />
                      </div>
-                  </Card>
-               </Col>
-            </Row>
-         ),
-      },
-      {
-         key: "ads",
-         label: "Quảng cáo",
-         children: (
-            <Row gutter={[16, 16]}>
-               <Col xs={24}>
-                  <Card title="Doanh thu quảng cáo theo loại">
-                     <div style={{ width: "100%", height: 300 }}>
-                        <ResponsiveContainer>
-                           <BarChart data={adRevenueData} layout="horizontal">
-                              <CartesianGrid strokeDasharray="3 3" />
-                              <XAxis type="number" tickFormatter={(v) => `${Math.round(v / 1_000_000)}M`} />
-                              <YAxis dataKey="category" type="category" width={120} />
-                              <Tooltip formatter={(v) => formatCurrency(v)} />
-                              <Bar dataKey="revenue" fill="#faad14" />
-                           </BarChart>
-                        </ResponsiveContainer>
+                     <div className="flex justify-between items-center p-3 bg-gray-50 rounded">
+                        <span>Tổng số đơn hàng</span>
+                        <Badge color="orange" text={totals.totalOrders || 0} />
                      </div>
                   </Card>
                </Col>
@@ -184,16 +239,153 @@ export default function RevenueDashboard() {
                         <YAxis tickFormatter={(v) => `${Math.round(v / 1_000_000)}M`} />
                         <Tooltip formatter={(v) => formatCurrency(v)} />
                         <Legend />
-                        <Line type="monotone" dataKey="systemRevenue" stroke="#1677ff" strokeWidth={2} name="Hệ thống" />
-                        <Line type="monotone" dataKey="driverRevenue" stroke="#52c41a" strokeWidth={2} name="Tài xế" />
-                        <Line type="monotone" dataKey="adRevenue" stroke="#faad14" strokeWidth={2} name="Quảng cáo" />
+                        <Line type="monotone" dataKey="systemRevenue" stroke="#1677ff" strokeWidth={2} name="Hệ thống (20%)" />
+                        <Line type="monotone" dataKey="driverPayout" stroke="#52c41a" strokeWidth={2} name="Tài xế (80%)" />
+                        <Line type="monotone" dataKey="driverRevenue" stroke="#faad14" strokeWidth={2} name="Tổng thu nhập tài xế" />
                      </LineChart>
                   </ResponsiveContainer>
                </div>
             </Card>
          ),
       },
+      {
+         key: "drivers-list",
+         label: "Danh sách tài xế",
+         children: (
+            <Card title="Danh sách tài xế và doanh thu">
+               <Table
+                  dataSource={driversWithRevenue}
+                  loading={loadingDrivers}
+                  rowKey="_id"
+                  pagination={{
+                     pageSize: 10,
+                     showSizeChanger: true,
+                     showTotal: (total) => `Tổng ${total} tài xế`
+                  }}
+                  columns={[
+                     {
+                        title: "Tài xế",
+                        key: "driver",
+                        width: 200,
+                        render: (_, record) => (
+                           <div className="flex items-center gap-3">
+                              <Avatar
+                                 src={record.avatarUrl}
+                                 icon={<UserOutlined />}
+                                 size="large"
+                              />
+                              <div>
+                                 <div className="font-semibold">{record.name}</div>
+                                 <div className="text-xs text-gray-500">{record.phone}</div>
+                              </div>
+                           </div>
+                        )
+                     },
+                     {
+                        title: "Trạng thái",
+                        dataIndex: "status",
+                        key: "status",
+                        width: 120,
+                        render: (status) => {
+                           const statusConfig = {
+                              Active: { color: "green", text: "Hoạt động" },
+                              Pending: { color: "orange", text: "Chờ duyệt" },
+                              Blocked: { color: "red", text: "Bị khóa" },
+                              Rejected: { color: "default", text: "Từ chối" }
+                           };
+                           const config = statusConfig[status] || { color: "default", text: status };
+                           return <Tag color={config.color}>{config.text}</Tag>;
+                        }
+                     },
+                     {
+                        title: "Đánh giá",
+                        dataIndex: "rating",
+                        key: "rating",
+                        width: 100,
+                        render: (rating) => (
+                           <div className="flex items-center gap-1">
+                              <span className="text-yellow-500">★</span>
+                              <span>{rating?.toFixed(1) || "0.0"}</span>
+                           </div>
+                        )
+                     },
+                     {
+                        title: "Tổng thu nhập",
+                        dataIndex: "totalRevenue",
+                        key: "totalRevenue",
+                        width: 150,
+                        align: "right",
+                        render: (value) => (
+                           <div className="font-semibold text-green-600">
+                              {formatCurrency(value || 0)}
+                           </div>
+                        ),
+                        sorter: (a, b) => (a.totalRevenue || 0) - (b.totalRevenue || 0)
+                     },
+                     {
+                        title: "Thực nhận (80%)",
+                        dataIndex: "totalDriverPayout",
+                        key: "totalDriverPayout",
+                        width: 150,
+                        align: "right",
+                        render: (value) => (
+                           <div className="text-blue-600">
+                              {formatCurrency(value || 0)}
+                           </div>
+                        ),
+                        sorter: (a, b) => (a.totalDriverPayout || 0) - (b.totalDriverPayout || 0)
+                     },
+                     {
+                        title: "Phí hệ thống (20%)",
+                        dataIndex: "totalSystemFee",
+                        key: "totalSystemFee",
+                        width: 150,
+                        align: "right",
+                        render: (value) => (
+                           <div className="text-purple-600">
+                              {formatCurrency(value || 0)}
+                           </div>
+                        ),
+                        sorter: (a, b) => (a.totalSystemFee || 0) - (b.totalSystemFee || 0)
+                     },
+                     {
+                        title: "Số đơn",
+                        dataIndex: "totalOrders",
+                        key: "totalOrders",
+                        width: 100,
+                        align: "center",
+                        render: (value) => (
+                           <Badge count={value || 0} showZero color="blue" />
+                        ),
+                        sorter: (a, b) => (a.totalOrders || 0) - (b.totalOrders || 0)
+                     },
+                     {
+                        title: "Số dư",
+                        dataIndex: "incomeBalance",
+                        key: "incomeBalance",
+                        width: 150,
+                        align: "right",
+                        render: (value) => (
+                           <div className="font-semibold">
+                              {formatCurrency(value || 0)}
+                           </div>
+                        ),
+                        sorter: (a, b) => (a.incomeBalance || 0) - (b.incomeBalance || 0)
+                     }
+                  ]}
+               />
+            </Card>
+         ),
+      },
    ];
+
+   if (loading) {
+      return (
+         <div className="flex justify-center items-center h-96">
+            <Spin size="large" />
+         </div>
+      );
+   }
 
    return (
       <div className="space-y-4">
@@ -202,7 +394,9 @@ export default function RevenueDashboard() {
                <h1 className="text-2xl md:text-3xl font-semibold text-green-700 flex items-center gap-2">
                   <DollarOutlined /> Quản lý doanh thu hệ thống
                </h1>
-               <div className="text-gray-500 text-sm">Theo dõi và phân tích doanh thu toàn diện</div>
+               <div className="text-gray-500 text-sm">
+                  Doanh thu hệ thống = 20% tổng tiền tài xế thu nhập
+               </div>
             </Col>
             <Col>
                <div className="flex items-center gap-2">
@@ -215,7 +409,6 @@ export default function RevenueDashboard() {
                         { value: "week", label: "Theo tuần" },
                         { value: "month", label: "Theo tháng" },
                         { value: "year", label: "Theo năm" },
-                        { value: "custom", label: "Tùy chỉnh" },
                      ]}
                   />
                </div>
@@ -227,9 +420,9 @@ export default function RevenueDashboard() {
                <Card>
                   <div className="flex items-center justify-between">
                      <div>
-                        <div className="text-gray-500 text-sm">Tổng doanh thu</div>
-                        <div className="text-2xl font-bold">{formatCurrency(totalRevenue)}</div>
-                        <div className="text-xs text-green-600 flex items-center gap-1"><RiseOutlined /> +12.5%</div>
+                        <div className="text-gray-500 text-sm">Tổng tiền tài xế thu nhập</div>
+                        <div className="text-2xl font-bold">{formatCurrency(totalDriverRevenue)}</div>
+                        <div className="text-xs text-gray-500">Tổng doanh thu từ đơn hàng</div>
                      </div>
                      <DollarOutlined className="text-green-700 text-2xl" />
                   </div>
@@ -241,9 +434,9 @@ export default function RevenueDashboard() {
                      <div>
                         <div className="text-gray-500 text-sm">Doanh thu hệ thống</div>
                         <div className="text-2xl font-bold">{formatCurrency(totalSystemRevenue)}</div>
-                        <div className="text-xs text-green-600 flex items-center gap-1"><RiseOutlined /> +8.2%</div>
+                        <div className="text-xs text-green-600">20% phí hoa hồng</div>
                      </div>
-                     <StockOutlined className="text-green-700 text-2xl" />
+                     <StockOutlined className="text-blue-700 text-2xl" />
                   </div>
                </Card>
             </Col>
@@ -251,9 +444,9 @@ export default function RevenueDashboard() {
                <Card>
                   <div className="flex items-center justify-between">
                      <div>
-                        <div className="text-gray-500 text-sm">Tiền tài xế</div>
-                        <div className="text-2xl font-bold">{formatCurrency(totalDriverRevenue)}</div>
-                        <div className="text-xs text-green-600 flex items-center gap-1"><RiseOutlined /> +15.3%</div>
+                        <div className="text-gray-500 text-sm">Tiền tài xế thực nhận</div>
+                        <div className="text-2xl font-bold">{formatCurrency(totalDriverPayout)}</div>
+                        <div className="text-xs text-blue-600">80% thu nhập</div>
                      </div>
                      <CarOutlined className="text-green-700 text-2xl" />
                   </div>
@@ -263,9 +456,9 @@ export default function RevenueDashboard() {
                <Card>
                   <div className="flex items-center justify-between">
                      <div>
-                        <div className="text-gray-500 text-sm">Doanh thu quảng cáo</div>
-                        <div className="text-2xl font-bold">{formatCurrency(totalAdRevenue)}</div>
-                        <div className="text-xs text-green-600 flex items-center gap-1">-2.1%</div>
+                        <div className="text-gray-500 text-sm">Tổng số đơn hàng</div>
+                        <div className="text-2xl font-bold">{totals.totalOrders || 0}</div>
+                        <div className="text-xs text-gray-500">Đơn đã hoàn thành</div>
                      </div>
                      <StockOutlined className="text-green-700 text-2xl" />
                   </div>

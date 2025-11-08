@@ -15,4 +15,8 @@ export const ADMIN_ENDPOINTS = {
 
    // Báo cáo doanh thu
    revenue: "/api/admin/revenue",
+   // Thống kê doanh thu hệ thống (tổng tiền tài xế thu nhập và 20% phí)
+   systemRevenue: "/api/admin/revenue/system",
+   // Danh sách tài xế với doanh thu
+   driversWithRevenue: "/api/admin/drivers/revenue",
 };

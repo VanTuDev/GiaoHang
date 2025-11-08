@@ -18,4 +18,8 @@ export const adminService = {
 
    // Báo cáo doanh thu
    getRevenueReport: (params) => axiosClient.get(ADMIN_ENDPOINTS.revenue, { params }),
+   // Thống kê doanh thu hệ thống
+   getSystemRevenueStats: (params) => axiosClient.get(ADMIN_ENDPOINTS.systemRevenue, { params }),
+   // Danh sách tài xế với doanh thu
+   getDriversWithRevenue: (params) => axiosClient.get(ADMIN_ENDPOINTS.driversWithRevenue, { params }),
 };

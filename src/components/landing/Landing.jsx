@@ -5,6 +5,7 @@ import Services from "./Services";
 import Stats from "./Stats";
 import CTA from "./CTA";
 import Footer from "./Footer";
+import AIChatBox from "./AIChatBox";
 
 export default function Landing() {
    return (
@@ -16,6 +17,7 @@ export default function Landing() {
          <Stats />
          <CTA />
          <Footer />
+         <AIChatBox />
       </div>
    );
 }
