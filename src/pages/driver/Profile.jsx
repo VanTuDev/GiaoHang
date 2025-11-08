@@ -447,6 +447,62 @@ export default function DriverProfile() {
                         )}
                      </Card>
                   </TabPane>
+
+                  <TabPane tab="Ngân hàng nhận tiền" key="bank">
+                     <Card title="Thông tin tài khoản ngân hàng">
+                        <Form
+                           layout="vertical"
+                           onFinish={async (values) => {
+                              try {
+                                 const resp = await driverService.updateBank(values);
+                                 if (resp.data?.success) {
+                                    message.success('Cập nhật thông tin ngân hàng thành công');
+                                 } else {
+                                    message.error(resp.data?.message || 'Không thể cập nhật');
+                                 }
+                              } catch (e) {
+                                 message.error('Lỗi: ' + (e.response?.data?.message || e.message));
+                              }
+                           }}
+                           initialValues={{
+                              bankAccountName: driverInfo?.bankAccountName || profile?.name || '',
+                              bankAccountNumber: driverInfo?.bankAccountNumber || '',
+                              bankName: driverInfo?.bankName || '',
+                              bankCode: driverInfo?.bankCode || ''
+                           }}
+                        >
+                           <Row gutter={16}>
+                              <Col xs={24} md={12}>
+                                 <Form.Item name="bankAccountName" label="Chủ tài khoản" rules={[{ required: true, message: 'Nhập tên chủ tài khoản' }]}>
+                                    <Input placeholder="VD: NGUYEN VAN A" />
+                                 </Form.Item>
+                              </Col>
+                              <Col xs={24} md={12}>
+                                 <Form.Item name="bankAccountNumber" label="Số tài khoản" rules={[{ required: true, message: 'Nhập số tài khoản' }]}>
+                                    <Input placeholder="VD: 0123456789" />
+                                 </Form.Item>
+                              </Col>
+                           </Row>
+
+                           <Row gutter={16}>
+                              <Col xs={24} md={12}>
+                                 <Form.Item name="bankName" label="Ngân hàng" rules={[{ required: true, message: 'Nhập tên ngân hàng' }]}>
+                                    <Input placeholder="VD: Vietcombank" />
+                                 </Form.Item>
+                              </Col>
+                              <Col xs={24} md={12}>
+                                 <Form.Item name="bankCode" label="Mã ngân hàng (tùy chọn)">
+                                    <Input placeholder="VD: VCB" />
+                                 </Form.Item>
+                              </Col>
+                           </Row>
+
+                           <Form.Item>
+                              <Button type="primary" htmlType="submit" className="bg-blue-600">Lưu</Button>
+                           </Form.Item>
+                        </Form>
+                     </Card>
+                  </TabPane>
                </Tabs>
             </>
          )}

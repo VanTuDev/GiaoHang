@@ -10,4 +10,5 @@ export const DRIVER_ENDPOINTS = {
    info: "/api/profile/driver", // Endpoint để lấy thông tin tài xế
    updateProfile: "/api/profile", // Endpoint để cập nhật thông tin cá nhân
    uploadAvatar: "/api/profile/avatar", // Endpoint để cập nhật avatar
+  updateBank: "/api/profile/driver/bank", // Cập nhật thông tin ngân hàng
 };

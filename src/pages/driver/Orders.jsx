@@ -35,6 +35,7 @@ import {
    MessageOutlined
 } from '@ant-design/icons';
 import { orderService } from '../../features/orders/api/orderService';
+import { paymentsService } from '../../features/orders/api/paymentsService';
 import { feedbackService } from '../../features/feedback/api/feedbackService';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import FeedbackDisplay from '../user/components/FeedbackDisplay';
@@ -56,7 +57,16 @@ export default function DriverOrders() {
    const [updatingStatus, setUpdatingStatus] = useState(false);
    const [modal, contextHolder] = Modal.useModal();
    const socketRef = useRef(null);
+   const activeTabRef = useRef(activeTab); // Lưu tab hiện tại để socket có thể check
    const [socketConnected, setSocketConnected] = useState(false);
+
+   // Payment modal states
+   const [paymentModalVisible, setPaymentModalVisible] = useState(false);
+   const [paymentLoading, setPaymentLoading] = useState(false);
+   const [paymentUrl, setPaymentUrl] = useState('');
+   const [payOrderId, setPayOrderId] = useState(null);
+   const [payItemId, setPayItemId] = useState(null);
+   const [payAmount, setPayAmount] = useState(null);
 
    // Feedback states
    const [feedbacks, setFeedbacks] = useState([]);
@@ -65,19 +75,71 @@ export default function DriverOrders() {
    const [reportModalVisible, setReportModalVisible] = useState(false);
    const [selectedDriverForReport, setSelectedDriverForReport] = useState(null);
 
+   // Cập nhật ref khi activeTab thay đổi
+   useEffect(() => {
+      activeTabRef.current = activeTab;
+   }, [activeTab]);
+
+   // Hàm refetch danh sách đơn có sẵn
+   const refetchAvailableOrders = async () => {
+      try {
+         console.log('\n🔄 [FRONTEND] ========== REFETCH ĐƠN CÓ SẴN ==========');
+         console.log('📤 [FRONTEND] Gọi API getAvailableOrders...');
+         const response = await orderService.getAvailableOrders();
+         console.log('📥 [FRONTEND] Response từ API:', {
+            success: response.data?.success,
+            dataCount: response.data?.data?.length || 0,
+            meta: response.data?.meta,
+            data: response.data?.data
+         });
+         if (response.data?.success) {
+            setAvailableOrders(response.data.data || []);
+            // Cập nhật count
+            const total = response.data?.meta?.total || response.data.data?.length || 0;
+            setCounts((c) => ({ ...c, available: total }));
+            console.log('✅ [FRONTEND] Đã cập nhật state:', {
+               availableOrdersCount: response.data.data?.length || 0,
+               total: total
+            });
+         } else {
+            console.log('❌ [FRONTEND] API trả về success: false');
+         }
+         console.log('✅ [FRONTEND] ===========================================\n');
+      } catch (error) {
+         console.error("❌ [FRONTEND] Lỗi khi tải lại danh sách đơn có sẵn:", error);
+      }
+   };
+
    // Tải danh sách đơn hàng
    useEffect(() => {
       const fetchOrders = async () => {
+         console.log('\n🚀 [FRONTEND] ========== FETCH ĐƠN HÀNG ==========');
+         console.log('📋 [FRONTEND] Active tab:', activeTab);
          setLoading(true);
          setError(null);
 
          try {
             if (activeTab === 'available') {
                // Tải danh sách đơn hàng có sẵn để nhận
+               console.log('📤 [FRONTEND] Gọi API getAvailableOrders...');
                const response = await orderService.getAvailableOrders();
+               console.log('📥 [FRONTEND] Response từ API getAvailableOrders:', {
+                  success: response.data?.success,
+                  dataCount: response.data?.data?.length || 0,
+                  meta: response.data?.meta,
+                  data: response.data?.data
+               });
                if (response.data?.success) {
                   setAvailableOrders(response.data.data || []);
+                  // Cập nhật count
+                  const total = response.data?.meta?.total || response.data.data?.length || 0;
+                  setCounts((c) => ({ ...c, available: total }));
+                  console.log('✅ [FRONTEND] Đã cập nhật state availableOrders:', {
+                     count: response.data.data?.length || 0,
+                     total: total
+                  });
                } else {
+                  console.log('❌ [FRONTEND] API trả về success: false');
                   setError("Không thể tải danh sách đơn hàng có sẵn");
                }
             } else {
@@ -104,6 +166,21 @@ export default function DriverOrders() {
       };
 
       fetchOrders();
+
+      // Nếu đang ở tab "available", thêm interval polling mỗi 10 giây để đảm bảo data luôn fresh
+      let intervalId = null;
+      if (activeTab === 'available') {
+         intervalId = setInterval(() => {
+            console.log('🔄 Auto-refresh đơn có sẵn...');
+            refetchAvailableOrders();
+         }, 10000); // 10 giây
+      }
+
+      return () => {
+         if (intervalId) {
+            clearInterval(intervalId);
+         }
+      };
    }, [activeTab]);
 
    // Xác định xem tài xế có thể báo cáo tài xế khác không
@@ -165,24 +242,35 @@ export default function DriverOrders() {
       });
 
       socket.on('order:available:new', (payload) => {
-         // Thông báo và cập nhật danh sách đơn có sẵn
+         console.log('\n📨 [FRONTEND] ========== NHẬN SOCKET EVENT ==========');
+         console.log('📥 [FRONTEND] Socket event: order:available:new', payload);
+         console.log('📋 [FRONTEND] Active tab hiện tại:', activeTabRef.current);
+
+         // Thông báo có đơn hàng mới
          message.info({
-            content: 'Có đơn hàng mới! Vào tab "Đơn có sẵn" để nhận.',
+            content: 'Có đơn hàng mới! Đang tải danh sách...',
             duration: 3
          });
 
-         // Chỉ thêm khung đơn mới tối thiểu (id, địa chỉ, tổng tiền) nếu đang ở tab available thì refetch
-         setAvailableOrders((prev) => prev);
-         // Nếu đang ở tab khác, tăng badge bằng cách kích hoạt refetch khi chuyển tab
-         // Không refetch tức thời để tránh spam API; người dùng chuyển tab sẽ tải mới
-         setCounts((c) => ({ ...c, available: (c.available || 0) + 1 }));
+         // Luôn refetch để đảm bảo có data mới nhất
+         // Kiểm tra tab hiện tại và tự động refetch nếu đang ở tab "available"
+         if (activeTabRef.current === 'available') {
+            // Tự động refetch để hiển thị đơn mới ngay lập tức
+            console.log('🔄 [FRONTEND] Đang ở tab "available", refetch ngay...');
+            refetchAvailableOrders();
+         } else {
+            // Nếu đang ở tab khác, tăng badge count và vẫn refetch để cập nhật count chính xác
+            console.log('📊 [FRONTEND] Đang ở tab khác, refetch để cập nhật count...');
+            refetchAvailableOrders(); // Vẫn refetch để cập nhật count chính xác
+         }
+         console.log('✅ [FRONTEND] ===========================================\n');
       });
 
       return () => {
          try { socket.disconnect(); } catch { }
          socketRef.current = null;
       };
-   }, []);
+   }, []); // Chỉ chạy một lần khi mount
 
    // Xem chi tiết đơn hàng
    const handleViewDetail = async (orderId) => {
@@ -230,11 +318,23 @@ export default function DriverOrders() {
       try {
          const response = await orderService.acceptItem(orderId, itemId);
          if (response.data?.success) {
-            message.success("Nhận đơn hàng thành công");
-            // Cập nhật lại danh sách
+            message.success("Nhận đơn hàng thành công! Đơn đã được chuyển sang tab 'Đơn đang giao'");
+
+            // Cập nhật lại danh sách đơn có sẵn (xóa item vừa nhận)
+            if (activeTab === 'available') {
+               await refetchAvailableOrders();
+            }
+
+            // Chuyển sang tab "active" để xem đơn vừa nhận
             setActiveTab('active');
+
+            // Refetch lại danh sách đơn đang giao để hiển thị đơn mới nhận
+            const statusResponse = await orderService.getDriverOrders({ status: 'Accepted,PickedUp,Delivering' });
+            if (statusResponse.data?.success) {
+               setOrders(statusResponse.data.data || []);
+            }
          } else {
-            message.error("Không thể nhận đơn hàng");
+            message.error(response.data?.message || "Không thể nhận đơn hàng");
          }
       } catch (error) {
          console.error("Lỗi khi nhận đơn hàng:", error);
@@ -262,6 +362,53 @@ export default function DriverOrders() {
          message.error("Lỗi khi cập nhật trạng thái đơn hàng: " + (error.response?.data?.message || error.message));
       } finally {
          setUpdatingStatus(false);
+      }
+   };
+
+   // Mở modal thanh toán VNPay (tạo URL + hiển thị QR)
+   const handleOpenPayment = async (order, item) => {
+      try {
+         setPaymentLoading(true);
+         setPayOrderId(order._id);
+         setPayItemId(item._id);
+         const amount = item?.priceBreakdown?.total || 0;
+         setPayAmount(amount);
+         const resp = await paymentsService.createVnPayUrl({
+            orderId: order._id,
+            orderItemId: item._id,
+            amount,
+         });
+         if (resp.data?.success && resp.data.paymentUrl) {
+            setPaymentUrl(resp.data.paymentUrl);
+            setPaymentModalVisible(true);
+         } else {
+            message.error('Không tạo được mã thanh toán');
+         }
+      } catch (e) {
+         message.error('Lỗi tạo URL thanh toán: ' + (e.response?.data?.message || e.message));
+      } finally {
+         setPaymentLoading(false);
+      }
+   };
+
+   // Sau khi khách thanh toán, tài xế bấm kiểm tra và xác nhận
+   const handleConfirmPaid = async () => {
+      if (!payOrderId || !payItemId) return;
+      try {
+         // Refetch chi tiết đơn để xem IPN đã cập nhật Delivered chưa
+         const res = await orderService.getOrderDetail(payOrderId);
+         const ord = res.data?.data;
+         const item = ord?.items?.find((i) => String(i._id) === String(payItemId));
+         if (item?.status === 'Delivered') {
+            message.success('Thanh toán đã xác nhận. Đơn đã giao xong.');
+            setPaymentModalVisible(false);
+            setDetailModalVisible(false);
+            setActiveTab('completed');
+         } else {
+            message.info('Chưa nhận IPN từ VNPay. Vui lòng đợi vài giây và thử lại.');
+         }
+      } catch (e) {
+         message.error('Lỗi kiểm tra thanh toán: ' + (e.response?.data?.message || e.message));
       }
    };
 
@@ -410,9 +557,9 @@ export default function DriverOrders() {
                            </Row>
                         </div>
 
-                        {/* Items */}
+                        {/* Items - Chỉ hiển thị items có thể nhận (status = Created và chưa có driverId) */}
                         <div className="space-y-3">
-                           {order.items.filter(item => item.status === 'Created').map((item) => (
+                           {order.items.filter(item => item.status === 'Created' && !item.driverId).map((item) => (
                               <div key={item._id} className="bg-blue-50 p-4 rounded-lg border border-blue-200">
                                  <Row gutter={[16, 8]} align="middle">
                                     <Col xs={24} sm={16}>
@@ -604,7 +751,7 @@ export default function DriverOrders() {
          <div className="bg-gradient-to-r from-blue-500 to-blue-600 p-6 rounded-lg text-white">
             <div className="flex items-center justify-between">
                <div>
-                  <h1 className="text-3xl font-bold mb-2">Quản lý đơn hàng</h1>
+                  <h1 className="text-3xl font-bold mb-2">Quản lý đơn hàng của tài xế</h1>
                   <p className="text-blue-100">Theo dõi và quản lý các đơn hàng của bạn</p>
                </div>
                <div className="text-right">
@@ -915,11 +1062,11 @@ export default function DriverOrders() {
                                        type="primary"
                                        size="large"
                                        className="bg-green-600 hover:bg-green-700"
-                                       onClick={() => handleUpdateStatus(selectedOrder._id, item._id, 'Delivered')}
-                                       loading={updatingStatus}
+                                       onClick={() => handleOpenPayment(selectedOrder, item)}
+                                       loading={paymentLoading}
                                        icon={<TrophyOutlined />}
                                     >
-                                       Hoàn thành giao hàng
+                                       Giao hàng thành công (Hiện QR)
                                     </Button>
                                  </div>
                               )}
@@ -956,6 +1103,48 @@ export default function DriverOrders() {
                setReportModalVisible(false);
             }}
          />
+
+         {/* Modal thanh toán VNPay - hiển thị QR từ paymentUrl */}
+         <Modal
+            title={
+               <div className="flex items-center space-x-2">
+                  <DollarOutlined className="text-green-500" />
+                  <span>Thanh toán qua VNPay</span>
+               </div>
+            }
+            open={paymentModalVisible}
+            onCancel={() => setPaymentModalVisible(false)}
+            footer={null}
+            width={520}
+         >
+            <div className="text-center space-y-4">
+               <div>
+                  <div className="text-sm text-gray-600 mb-2">Số tiền cần thanh toán</div>
+                  <div className="text-2xl font-bold text-green-600">{payAmount ? formatCurrency(payAmount) : '--'}</div>
+               </div>
+               {paymentUrl ? (
+                  <div className="flex flex-col items-center">
+                     <img
+                        alt="QR VNPay"
+                        className="rounded-lg border"
+                        width={240}
+                        height={240}
+                        src={`https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(paymentUrl)}&size=240x240`}
+                     />
+                     <div className="text-xs text-gray-500 mt-2">Khách hàng quét QR để thanh toán</div>
+                     <Space className="mt-4">
+                        <Button type="default" onClick={() => window.open(paymentUrl, '_blank')}>Mở VNPay</Button>
+                        <Button type="primary" className="bg-green-600" onClick={handleConfirmPaid}>Đã nhận thanh toán</Button>
+                     </Space>
+                  </div>
+               ) : (
+                  <div className="py-10">
+                     <Spin />
+                     <div className="text-xs text-gray-500 mt-2">Đang tạo mã thanh toán...</div>
+                  </div>
+               )}
+            </div>
+         </Modal>
 
          {contextHolder}
       </div>
