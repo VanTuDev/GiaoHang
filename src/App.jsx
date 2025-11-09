@@ -30,7 +30,9 @@ import DriverOrders from "./pages/driver/Orders";
 import DriverChat from "./pages/driver/Chat";
 import DriverContact from "./pages/driver/Contact";
 import DriverRevenue from "./pages/driver/Revenue";
+import DriverWithdrawal from "./pages/driver/Withdrawal";
 import VehicleManagement from "./pages/driver/VehicleManagement";
+import AdminWithdrawals from "./pages/admin/outlet/AdminWithdrawals";
 
 export default function App() {
   return (
@@ -88,6 +90,7 @@ export default function App() {
                 <Route path="profile" element={<DriverProfile />} />
                 <Route path="orders" element={<DriverOrders />} />
                 <Route path="revenue" element={<DriverRevenue />} />
+                <Route path="withdrawal" element={<DriverWithdrawal />} />
                 <Route path="vehicles" element={<VehicleManagement />} />
                 <Route path="chat" element={<DriverChat />} />
                 <Route path="contact" element={<DriverContact />} />
@@ -99,8 +102,9 @@ export default function App() {
             <Route path="/admin" element={<AdminDashBoard />}>
               <Route path="accounts" element={<AccountsPage />} />
               <Route path="drivers" element={<DriversPage />} />
-              <Route path="revenue" element={<RevenuePage />} />
-              <Route path="reports" element={<ReportsPage />} />
+            <Route path="revenue" element={<RevenuePage />} />
+            <Route path="withdrawals" element={<AdminWithdrawals />} />
+            <Route path="reports" element={<ReportsPage />} />
             </Route>
 
             {/* Fallback */}

@@ -62,11 +62,23 @@ export default function DriverOrders() {
 
    // Payment modal states
    const [paymentModalVisible, setPaymentModalVisible] = useState(false);
-   const [paymentLoading, setPaymentLoading] = useState(false);
-   const [paymentUrl, setPaymentUrl] = useState('');
    const [payOrderId, setPayOrderId] = useState(null);
    const [payItemId, setPayItemId] = useState(null);
    const [payAmount, setPayAmount] = useState(null);
+
+   // Thông tin tài khoản admin cố định
+   const ADMIN_BANK_INFO = {
+      accountName: 'NGO TRUONG QUANG VU',
+      accountNumber: '0934996473',
+      bankName: 'Ngân hàng'
+   };
+
+   // Tạo QR code data từ thông tin tài khoản (VietQR format)
+   const generateQRCodeData = (amount) => {
+      // Format VietQR đơn giản với thông tin tài khoản
+      const qrData = `00020101021238570010A000000727012700069704240110${ADMIN_BANK_INFO.accountNumber}0208QRIBFTTA53037045404${amount}5802VN62100510${ADMIN_BANK_INFO.accountName}6304`;
+      return qrData;
+   };
 
    // Feedback states
    const [feedbacks, setFeedbacks] = useState([]);
@@ -227,7 +239,20 @@ export default function DriverOrders() {
       // Tránh kết nối nhiều lần
       if (socketRef.current) return;
 
-      const SOCKET_URL = 'http://localhost:8080';
+      // Lấy Socket.IO URL từ biến môi trường
+      let SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:8080';
+
+      // Trong DEV mode: Nếu truy cập từ IP (không phải localhost) và SOCKET_URL chứa localhost
+      // thì tự động thay localhost bằng IP hiện tại để hoạt động với mobile
+      if (import.meta.env.DEV && typeof window !== 'undefined') {
+         const currentHost = window.location.hostname;
+         if (currentHost !== 'localhost' && currentHost !== '127.0.0.1' && SOCKET_URL.includes('localhost')) {
+            // Thay localhost bằng IP hiện tại, giữ nguyên port
+            SOCKET_URL = SOCKET_URL.replace('localhost', currentHost).replace('127.0.0.1', currentHost);
+            console.log('🔧 [DEV MODE] Socket.IO URL đã được tự động chuyển từ localhost sang:', SOCKET_URL);
+         }
+      }
+
       const socket = io(SOCKET_URL, { transports: ['websocket'], withCredentials: false });
       socketRef.current = socket;
 
@@ -365,51 +390,68 @@ export default function DriverOrders() {
       }
    };
 
-   // Mở modal thanh toán VNPay (tạo URL + hiển thị QR)
-   const handleOpenPayment = async (order, item) => {
-      try {
-         setPaymentLoading(true);
-         setPayOrderId(order._id);
-         setPayItemId(item._id);
-         const amount = item?.priceBreakdown?.total || 0;
-         setPayAmount(amount);
-         const resp = await paymentsService.createVnPayUrl({
-            orderId: order._id,
-            orderItemId: item._id,
-            amount,
-         });
-         if (resp.data?.success && resp.data.paymentUrl) {
-            setPaymentUrl(resp.data.paymentUrl);
-            setPaymentModalVisible(true);
-         } else {
-            message.error('Không tạo được mã thanh toán');
-         }
-      } catch (e) {
-         message.error('Lỗi tạo URL thanh toán: ' + (e.response?.data?.message || e.message));
-      } finally {
-         setPaymentLoading(false);
-      }
+   // Mở modal thanh toán với QR code cố định của admin
+   const handleOpenPayment = (order, item) => {
+      setPayOrderId(order._id);
+      setPayItemId(item._id);
+      const amount = item?.priceBreakdown?.total || 0;
+      setPayAmount(amount);
+      setPaymentModalVisible(true);
    };
 
-   // Sau khi khách thanh toán, tài xế bấm kiểm tra và xác nhận
+   // Sau khi khách thanh toán, tài xế bấm "Đã nhận thanh toán" để xác nhận thủ công
+   // Hệ thống sẽ tự động: cập nhật status = Delivered, cộng tiền vào tài khoản, tạo giao dịch
    const handleConfirmPaid = async () => {
       if (!payOrderId || !payItemId) return;
-      try {
-         // Refetch chi tiết đơn để xem IPN đã cập nhật Delivered chưa
-         const res = await orderService.getOrderDetail(payOrderId);
-         const ord = res.data?.data;
-         const item = ord?.items?.find((i) => String(i._id) === String(payItemId));
-         if (item?.status === 'Delivered') {
-            message.success('Thanh toán đã xác nhận. Đơn đã giao xong.');
-            setPaymentModalVisible(false);
-            setDetailModalVisible(false);
-            setActiveTab('completed');
-         } else {
-            message.info('Chưa nhận IPN từ VNPay. Vui lòng đợi vài giây và thử lại.');
+
+      // Xác nhận với tài xế trước khi cập nhật
+      modal.confirm({
+         title: 'Xác nhận đã nhận thanh toán',
+         icon: <CheckCircleOutlined />,
+         content: 'Bạn đã kiểm tra và xác nhận khách hàng đã chuyển khoản thành công?',
+         okText: 'Xác nhận',
+         cancelText: 'Hủy',
+         onOk: async () => {
+            setUpdatingStatus(true);
+            try {
+               // Cập nhật trạng thái item thành "Delivered"
+               // Backend sẽ tự động: cộng tiền vào incomeBalance, tạo DriverTransaction
+               const response = await orderService.updateItemStatus(payOrderId, payItemId, 'Delivered');
+
+               if (response.data?.success) {
+                  message.success('Đã xác nhận thanh toán! Tiền đã được cộng vào tài khoản của bạn.');
+
+                  // Đóng modal
+                  setPaymentModalVisible(false);
+                  setDetailModalVisible(false);
+
+                  // Chuyển sang tab "Đã hoàn thành"
+                  setActiveTab('completed');
+
+                  // Refresh danh sách đơn hàng
+                  const statusResponse = await orderService.getDriverOrders({ status: 'Delivered' });
+                  if (statusResponse.data?.success) {
+                     setOrders(statusResponse.data.data || []);
+                  }
+
+                  // Cập nhật lại chi tiết đơn hàng nếu modal vẫn mở
+                  if (selectedOrder) {
+                     const detailRes = await orderService.getOrderDetail(payOrderId);
+                     if (detailRes.data?.success) {
+                        setSelectedOrder(detailRes.data.data);
+                     }
+                  }
+               } else {
+                  message.error(response.data?.message || 'Không thể xác nhận thanh toán');
+               }
+            } catch (error) {
+               console.error('Lỗi xác nhận thanh toán:', error);
+               message.error('Lỗi xác nhận thanh toán: ' + (error.response?.data?.message || error.message));
+            } finally {
+               setUpdatingStatus(false);
+            }
          }
-      } catch (e) {
-         message.error('Lỗi kiểm tra thanh toán: ' + (e.response?.data?.message || e.message));
-      }
+      });
    };
 
    // Xác nhận hủy đơn hàng
@@ -1063,7 +1105,6 @@ export default function DriverOrders() {
                                        size="large"
                                        className="bg-green-600 hover:bg-green-700"
                                        onClick={() => handleOpenPayment(selectedOrder, item)}
-                                       loading={paymentLoading}
                                        icon={<TrophyOutlined />}
                                     >
                                        Giao hàng thành công (Hiện QR)
@@ -1104,12 +1145,12 @@ export default function DriverOrders() {
             }}
          />
 
-         {/* Modal thanh toán VNPay - hiển thị QR từ paymentUrl */}
+         {/* Modal thanh toán - hiển thị QR code cố định của admin */}
          <Modal
             title={
                <div className="flex items-center space-x-2">
                   <DollarOutlined className="text-green-500" />
-                  <span>Thanh toán qua VNPay</span>
+                  <span>Thanh toán chuyển khoản</span>
                </div>
             }
             open={paymentModalVisible}
@@ -1122,27 +1163,59 @@ export default function DriverOrders() {
                   <div className="text-sm text-gray-600 mb-2">Số tiền cần thanh toán</div>
                   <div className="text-2xl font-bold text-green-600">{payAmount ? formatCurrency(payAmount) : '--'}</div>
                </div>
-               {paymentUrl ? (
-                  <div className="flex flex-col items-center">
+
+               <div className="flex flex-col items-center">
+                  {/* QR Code cố định */}
+                  <div className="bg-white p-4 rounded-lg border-2 border-gray-200 shadow-lg">
                      <img
-                        alt="QR VNPay"
-                        className="rounded-lg border"
-                        width={240}
-                        height={240}
-                        src={`https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(paymentUrl)}&size=240x240`}
+                        alt="QR Code thanh toán"
+                        className="rounded-lg"
+                        width={280}
+                        height={280}
+                        src="/imgs/QRCodeBengo.png"
+                        onError={(e) => {
+                           // Fallback: Tạo QR code từ thông tin tài khoản nếu ảnh không load được
+                           const qrData = generateQRCodeData(payAmount || 0);
+                           e.target.src = `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(qrData)}&size=280x280`;
+                        }}
                      />
-                     <div className="text-xs text-gray-500 mt-2">Khách hàng quét QR để thanh toán</div>
-                     <Space className="mt-4">
-                        <Button type="default" onClick={() => window.open(paymentUrl, '_blank')}>Mở VNPay</Button>
-                        <Button type="primary" className="bg-green-600" onClick={handleConfirmPaid}>Đã nhận thanh toán</Button>
-                     </Space>
                   </div>
-               ) : (
-                  <div className="py-10">
-                     <Spin />
-                     <div className="text-xs text-gray-500 mt-2">Đang tạo mã thanh toán...</div>
+
+                  {/* Thông tin tài khoản */}
+                  <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200 w-full">
+                     <div className="text-left space-y-2">
+                        <div>
+                           <span className="text-sm text-gray-600">Chủ tài khoản: </span>
+                           <span className="font-semibold text-blue-700">{ADMIN_BANK_INFO.accountName}</span>
+                        </div>
+                        <div>
+                           <span className="text-sm text-gray-600">Số tài khoản: </span>
+                           <span className="font-semibold text-blue-700">{ADMIN_BANK_INFO.accountNumber}</span>
+                        </div>
+                        <div>
+                           <span className="text-sm text-gray-600">Số tiền: </span>
+                           <span className="font-semibold text-green-600">{payAmount ? formatCurrency(payAmount) : '--'}</span>
+                        </div>
+                     </div>
                   </div>
-               )}
+
+                  <div className="text-xs text-gray-500 mt-2">
+                     Khách hàng quét QR code hoặc chuyển khoản trực tiếp
+                  </div>
+
+                  <Space className="mt-4">
+                     <Button
+                        type="primary"
+                        className="bg-green-600"
+                        onClick={handleConfirmPaid}
+                        loading={updatingStatus}
+                        icon={<CheckCircleOutlined />}
+                        size="large"
+                     >
+                        Đã nhận thanh toán
+                     </Button>
+                  </Space>
+               </div>
             </div>
          </Modal>
 

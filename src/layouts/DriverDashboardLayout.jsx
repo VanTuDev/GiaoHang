@@ -13,6 +13,7 @@ import {
    MenuUnfoldOutlined,
    LogoutOutlined,
    CarOutlined,
+   DollarOutlined,
 } from "@ant-design/icons";
 
 const { Header, Sider, Content, Footer } = Layout;
@@ -72,6 +73,7 @@ export default function DriverDashboardLayout() {
                   { key: "orders", icon: <ShoppingOutlined />, label: <Link to="/driver/orders">Đơn khách</Link> },
                   { key: "vehicles", icon: <CarOutlined />, label: <Link to="/driver/vehicles">Quản lý xe & Trạng thái</Link> },
                   { key: "revenue", icon: <BarChartOutlined />, label: <Link to="/driver/revenue">Doanh thu</Link> },
+                  { key: "withdrawal", icon: <DollarOutlined />, label: <Link to="/driver/withdrawal">Rút tiền</Link> },
                   { key: "chat", icon: <MessageOutlined />, label: <Link to="/driver/chat">Chat với khách hàng</Link> },
                   { key: "contact", icon: <PhoneOutlined />, label: <Link to="/driver/contact">Liên hệ</Link> },
                ]}

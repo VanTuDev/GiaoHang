@@ -1,5 +1,7 @@
 // Centralized API endpoint paths for authentication flows
-// Base URL is handled by Vite proxy ("/api" -> http://localhost:8080)
+// Base URL is handled by axiosClient (uses VITE_API_BASE_URL from .env)
+// Development: Vite proxy ("/api" -> http://localhost:5000)
+// Production: Uses VITE_API_BASE_URL environment variable
 
 export const AUTH_ENDPOINTS = {
    register: "/api/auth/register",

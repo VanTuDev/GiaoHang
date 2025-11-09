@@ -28,6 +28,10 @@ export default defineConfig({
             ]
          },
          workbox: {
+            // Tăng giới hạn file size để cache file lớn (10MB)
+            maximumFileSizeToCacheInBytes: 10 * 1024 * 1024,
+            // Bỏ qua file lớn trong precache, sẽ cache runtime
+            globIgnores: ['**/node_modules/**/*'],
             runtimeCaching: [
                {
                   urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
@@ -85,9 +89,11 @@ export default defineConfig({
       open: true,
       host: '0.0.0.0',
       strictPort: true,
+      // Proxy chỉ dùng trong development
+      // Production sẽ dùng VITE_API_BASE_URL từ biến môi trường
       proxy: {
          '/api': {
-            target: 'http://localhost:8080',  // Sửa từ 8080 -> 5000
+            target: process.env.VITE_API_BASE_URL || 'http://localhost:8080',
             changeOrigin: true,
             secure: false,
          }
