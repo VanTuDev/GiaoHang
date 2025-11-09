@@ -216,7 +216,7 @@ export default function OrderCreate() {
       setSubmitting(true);
 
       try {
-         const { pickupAddress, dropoffAddress, customerNote } = values;
+         const { pickupAddress, dropoffAddress, customerNote, paymentBy = "sender" } = values;
 
          // Chuẩn bị dữ liệu đơn hàng
          const orderData = {
@@ -224,6 +224,7 @@ export default function OrderCreate() {
             dropoffAddress,
             customerNote,
             paymentMethod: "Cash", // Mặc định là tiền mặt
+            paymentBy, // Người trả tiền: "sender" hoặc "receiver"
             items: orderItems.map(item => ({
                vehicleType: item.vehicleType,
                vehicleId: item.vehicleId, // Gửi vehicleId để backend có thể lấy pricePerKm

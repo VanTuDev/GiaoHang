@@ -97,7 +97,10 @@ export default function DriverOrders() {
       try {
          console.log('\n🔄 [FRONTEND] ========== REFETCH ĐƠN CÓ SẴN ==========');
          console.log('📤 [FRONTEND] Gọi API getAvailableOrders...');
-         const response = await orderService.getAvailableOrders();
+         // Thêm timestamp để tránh cache (304 Not Modified)
+         const response = await orderService.getAvailableOrders({
+            _t: Date.now() // Timestamp để bypass cache
+         });
          console.log('📥 [FRONTEND] Response từ API:', {
             success: response.data?.success,
             dataCount: response.data?.data?.length || 0,
@@ -134,7 +137,10 @@ export default function DriverOrders() {
             if (activeTab === 'available') {
                // Tải danh sách đơn hàng có sẵn để nhận
                console.log('📤 [FRONTEND] Gọi API getAvailableOrders...');
-               const response = await orderService.getAvailableOrders();
+               // Thêm timestamp để tránh cache
+               const response = await orderService.getAvailableOrders({
+                  _t: Date.now()
+               });
                console.log('📥 [FRONTEND] Response từ API getAvailableOrders:', {
                   success: response.data?.success,
                   dataCount: response.data?.data?.length || 0,
@@ -205,8 +211,12 @@ export default function DriverOrders() {
    useEffect(() => {
       const fetchCounts = async () => {
          try {
-            // Available
-            const availRes = await orderService.getAvailableOrders({ page: 1, limit: 1 });
+            // Available - Thêm timestamp để tránh cache
+            const availRes = await orderService.getAvailableOrders({
+               page: 1,
+               limit: 1,
+               _t: Date.now()
+            });
             const available = availRes.data?.meta?.total || (availRes.data?.data?.length || 0);
 
             // Active = Accepted + PickedUp + Delivering (ước lượng theo số đơn, không theo item)
@@ -1079,16 +1089,29 @@ export default function DriverOrders() {
                                     >
                                        Hủy đơn
                                     </Button>
-                                    <Button
-                                       type="primary"
-                                       size="large"
-                                       className="bg-blue-600 hover:bg-blue-700"
-                                       onClick={() => handleUpdateStatus(selectedOrder._id, item._id, 'Delivering')}
-                                       loading={updatingStatus}
-                                       icon={<CarOutlined />}
-                                    >
-                                       Đang giao hàng
-                                    </Button>
+                                    {/* Nếu người đặt trả tiền: Hiển thị QR khi đã lấy hàng */}
+                                    {selectedOrder.paymentBy === 'sender' ? (
+                                       <Button
+                                          type="primary"
+                                          size="large"
+                                          className="bg-green-600 hover:bg-green-700"
+                                          onClick={() => handleOpenPayment(selectedOrder, item)}
+                                          icon={<DollarOutlined />}
+                                       >
+                                          Hiện QR thanh toán
+                                       </Button>
+                                    ) : (
+                                       <Button
+                                          type="primary"
+                                          size="large"
+                                          className="bg-blue-600 hover:bg-blue-700"
+                                          onClick={() => handleUpdateStatus(selectedOrder._id, item._id, 'Delivering')}
+                                          loading={updatingStatus}
+                                          icon={<CarOutlined />}
+                                       >
+                                          Đang giao hàng
+                                       </Button>
+                                    )}
                                  </div>
                               )}
 
@@ -1100,15 +1123,29 @@ export default function DriverOrders() {
                                     >
                                        Hủy đơn
                                     </Button>
-                                    <Button
-                                       type="primary"
-                                       size="large"
-                                       className="bg-green-600 hover:bg-green-700"
-                                       onClick={() => handleOpenPayment(selectedOrder, item)}
-                                       icon={<TrophyOutlined />}
-                                    >
-                                       Giao hàng thành công (Hiện QR)
-                                    </Button>
+                                    {/* Nếu người nhận trả tiền: Hiển thị QR khi đang giao hàng */}
+                                    {selectedOrder.paymentBy === 'receiver' ? (
+                                       <Button
+                                          type="primary"
+                                          size="large"
+                                          className="bg-green-600 hover:bg-green-700"
+                                          onClick={() => handleOpenPayment(selectedOrder, item)}
+                                          icon={<DollarOutlined />}
+                                       >
+                                          Hiện QR thanh toán
+                                       </Button>
+                                    ) : (
+                                       <Button
+                                          type="primary"
+                                          size="large"
+                                          className="bg-green-600 hover:bg-green-700"
+                                          onClick={() => handleUpdateStatus(selectedOrder._id, item._id, 'Delivered')}
+                                          loading={updatingStatus}
+                                          icon={<CheckCircleOutlined />}
+                                       >
+                                          Giao hàng thành công
+                                       </Button>
+                                    )}
                                  </div>
                               )}
 

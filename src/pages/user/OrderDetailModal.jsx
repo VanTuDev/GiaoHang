@@ -1,5 +1,5 @@
-import React from 'react';
-import { Modal, Card, Row, Col, Button, Divider, Tag, Avatar, Steps } from 'antd';
+import React, { useState } from 'react';
+import { Modal, Card, Row, Col, Button, Divider, Tag, Avatar, Steps, Space } from 'antd';
 import {
    EyeOutlined,
    ExclamationCircleOutlined,
@@ -12,7 +12,8 @@ import {
    WarningOutlined,
    ClockCircleOutlined,
    ProfileOutlined,
-   CheckCircleOutlined
+   CheckCircleOutlined,
+   DollarOutlined
 } from '@ant-design/icons';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import FeedbackDisplay from './components/FeedbackDisplay';
@@ -111,6 +112,29 @@ const OrderDetailModal = ({
    onOpenFeedback,
    onOpenReport
 }) => {
+   // Payment modal states
+   const [paymentModalVisible, setPaymentModalVisible] = useState(false);
+   const [selectedItem, setSelectedItem] = useState(null);
+
+   // Thông tin tài khoản admin cố định
+   const ADMIN_BANK_INFO = {
+      accountName: 'NGO TRUONG QUANG VU',
+      accountNumber: '0934996473',
+      bankName: 'Ngân hàng'
+   };
+
+   // Tạo QR code data từ thông tin tài khoản (VietQR format)
+   const generateQRCodeData = (amount) => {
+      const qrData = `00020101021238570010A000000727012700069704240110${ADMIN_BANK_INFO.accountNumber}0208QRIBFTTA53037045404${amount}5802VN62100510${ADMIN_BANK_INFO.accountName}6304`;
+      return qrData;
+   };
+
+   // Mở modal thanh toán
+   const handleOpenPayment = (item) => {
+      setSelectedItem(item);
+      setPaymentModalVisible(true);
+   };
+
    return (
       <Modal
          title={
@@ -315,6 +339,37 @@ const OrderDetailModal = ({
                            </div>
                         </div>
 
+                        {/* Action buttons - Hiển thị QR code dựa trên paymentBy */}
+                        {/* Nếu người đặt trả tiền: Hiển thị QR khi status = PickedUp */}
+                        {order.paymentBy === 'sender' && item.status === 'PickedUp' && item.driverId && (
+                           <div className="flex justify-center">
+                              <Button
+                                 type="primary"
+                                 size="large"
+                                 icon={<DollarOutlined />}
+                                 onClick={() => handleOpenPayment(item)}
+                                 className="bg-green-600 hover:bg-green-700"
+                              >
+                                 Thanh toán ngay (Hiện QR)
+                              </Button>
+                           </div>
+                        )}
+
+                        {/* Nếu người nhận trả tiền: Hiển thị QR khi status = Delivering */}
+                        {order.paymentBy === 'receiver' && item.status === 'Delivering' && item.driverId && (
+                           <div className="flex justify-center">
+                              <Button
+                                 type="primary"
+                                 size="large"
+                                 icon={<DollarOutlined />}
+                                 onClick={() => handleOpenPayment(item)}
+                                 className="bg-green-600 hover:bg-green-700"
+                              >
+                                 Thanh toán ngay (Hiện QR)
+                              </Button>
+                           </div>
+                        )}
+
                         {/* Action buttons cho đơn đã hoàn thành */}
                         {item.status === 'Delivered' && item.driverId && (
                            <div className="flex justify-center space-x-4">
@@ -360,6 +415,84 @@ const OrderDetailModal = ({
                )}
             </div>
          )}
+
+         {/* Modal thanh toán - hiển thị QR code cố định của admin */}
+         <Modal
+            title={
+               <div className="flex items-center space-x-2">
+                  <DollarOutlined className="text-green-500" />
+                  <span>Thanh toán chuyển khoản</span>
+               </div>
+            }
+            open={paymentModalVisible}
+            onCancel={() => setPaymentModalVisible(false)}
+            footer={null}
+            width={520}
+         >
+            {selectedItem && (
+               <div className="text-center space-y-4">
+                  <div>
+                     <div className="text-sm text-gray-600 mb-2">Số tiền cần thanh toán</div>
+                     <div className="text-2xl font-bold text-green-600">
+                        {formatCurrency(selectedItem.priceBreakdown?.total || 0)}
+                     </div>
+                  </div>
+
+                  <div className="flex flex-col items-center">
+                     {/* QR Code cố định */}
+                     <div className="bg-white p-4 rounded-lg border-2 border-gray-200 shadow-lg">
+                        <img
+                           alt="QR Code thanh toán"
+                           className="rounded-lg"
+                           width={280}
+                           height={280}
+                           src="/imgs/QRCodeBengo.png"
+                           onError={(e) => {
+                              // Fallback: Tạo QR code từ thông tin tài khoản nếu ảnh không load được
+                              const qrData = generateQRCodeData(selectedItem.priceBreakdown?.total || 0);
+                              e.target.src = `https://api.qrserver.com/v1/create-qr-code/?data=${encodeURIComponent(qrData)}&size=280x280`;
+                           }}
+                        />
+                     </div>
+
+                     {/* Thông tin tài khoản */}
+                     <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200 w-full">
+                        <div className="text-left space-y-2">
+                           <div>
+                              <span className="text-sm text-gray-600">Chủ tài khoản: </span>
+                              <span className="font-semibold text-blue-700">{ADMIN_BANK_INFO.accountName}</span>
+                           </div>
+                           <div>
+                              <span className="text-sm text-gray-600">Số tài khoản: </span>
+                              <span className="font-semibold text-blue-700">{ADMIN_BANK_INFO.accountNumber}</span>
+                           </div>
+                           <div>
+                              <span className="text-sm text-gray-600">Số tiền: </span>
+                              <span className="font-semibold text-green-600">
+                                 {formatCurrency(selectedItem.priceBreakdown?.total || 0)}
+                              </span>
+                           </div>
+                        </div>
+                     </div>
+
+                     <div className="text-xs text-gray-500 mt-2">
+                        Quét QR code hoặc chuyển khoản trực tiếp đến tài khoản trên
+                     </div>
+
+                     <Space className="mt-4">
+                        <Button
+                           type="primary"
+                           className="bg-blue-600"
+                           onClick={() => setPaymentModalVisible(false)}
+                           size="large"
+                        >
+                           Đã thanh toán
+                        </Button>
+                     </Space>
+                  </div>
+               </div>
+            )}
+         </Modal>
       </Modal>
    );
 };

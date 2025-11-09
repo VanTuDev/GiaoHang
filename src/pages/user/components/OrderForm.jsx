@@ -1,6 +1,6 @@
 import React, { useMemo, useRef, useState } from "react";
-import { EnvironmentOutlined, AimOutlined, SearchOutlined } from "@ant-design/icons";
-import { Form, Input, Button, Card, Row, Col, Segmented, Space } from "antd";
+import { EnvironmentOutlined, AimOutlined, SearchOutlined, DollarOutlined } from "@ant-design/icons";
+import { Form, Input, Button, Card, Row, Col, Segmented, Space, Radio } from "antd";
 // OpenStreetMap via react-leaflet
 import { MapContainer, TileLayer, Marker, useMapEvents } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
@@ -97,7 +97,8 @@ const OrderForm = ({
             initialValues={{
                pickupAddress: "",
                dropoffAddress: "",
-               customerNote: ""
+               customerNote: "",
+               paymentBy: "sender" // Mặc định: người đặt trả tiền
             }}
          >
             {/* Khu vực địa điểm + Map */}
@@ -175,6 +176,37 @@ const OrderForm = ({
                   </div>
                </Col>
             </Row>
+
+            {/* Payment By - Người trả tiền */}
+            <Form.Item
+               name="paymentBy"
+               label={
+                  <span>
+                     <DollarOutlined className="mr-2" />
+                     Người trả tiền
+                  </span>
+               }
+               rules={[{ required: true, message: "Vui lòng chọn người trả tiền" }]}
+            >
+               <Radio.Group>
+                  <Radio value="sender">
+                     <div>
+                        <strong>Người đặt trả tiền</strong>
+                        <div className="text-xs text-gray-500 mt-1">
+                           Thanh toán trước khi lấy hàng thành công
+                        </div>
+                     </div>
+                  </Radio>
+                  <Radio value="receiver" className="mt-2">
+                     <div>
+                        <strong>Người nhận trả tiền</strong>
+                        <div className="text-xs text-gray-500 mt-1">
+                           Thanh toán trước khi giao hàng thành công
+                        </div>
+                     </div>
+                  </Radio>
+               </Radio.Group>
+            </Form.Item>
 
             {/* Customer Note */}
             <Form.Item
