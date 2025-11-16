@@ -34,7 +34,9 @@ import {
    DollarOutlined,
    StarOutlined,
    TrophyOutlined,
-   RocketOutlined
+   RocketOutlined,
+   AimOutlined,
+   ReloadOutlined
 } from '@ant-design/icons';
 import { vehicleService } from '../../features/vehicles/api/vehicleService';
 import { driverService } from '../../features/driver/api/driverService';
@@ -57,6 +59,9 @@ export default function VehicleManagement() {
    const [isOnline, setIsOnline] = useState(false);
    const [updatingStatus, setUpdatingStatus] = useState(false);
    const [driverInfo, setDriverInfo] = useState(null);
+   const [currentLocation, setCurrentLocation] = useState(null);
+   const [locationUpdatedAt, setLocationUpdatedAt] = useState(null);
+   const [updatingLocation, setUpdatingLocation] = useState(false);
    const [stats, setStats] = useState({
       totalTrips: 0,
       rating: 5.0,
@@ -90,6 +95,16 @@ export default function VehicleManagement() {
                setDriverInfo(driverData);
                setIsOnline(driverData.isOnline || false);
                setSelectedDistricts(driverData.serviceAreas || []);
+               
+               // Lưu thông tin vị trí
+               if (driverData.currentLocation && driverData.currentLocation.coordinates) {
+                  const [lng, lat] = driverData.currentLocation.coordinates;
+                  setCurrentLocation({ latitude: lat, longitude: lng });
+               }
+               if (driverData.locationUpdatedAt) {
+                  setLocationUpdatedAt(new Date(driverData.locationUpdatedAt));
+               }
+               
                setStats({
                   totalTrips: driverData.totalTrips || 0,
                   rating: driverData.rating || 5.0,
@@ -236,18 +251,115 @@ export default function VehicleManagement() {
       setUpdatingStatus(true);
 
       try {
-         const response = await orderService.setDriverOnline(checked);
-
-         if (response.data?.success) {
-            setIsOnline(checked);
-            message.success(checked ? 'Đã bật trạng thái hoạt động' : 'Đã tắt trạng thái hoạt động');
+         // Nếu bật online, lấy vị trí hiện tại và gửi lên server
+         if (checked) {
+            if (navigator.geolocation) {
+               navigator.geolocation.getCurrentPosition(
+                  async (position) => {
+                     const { latitude, longitude } = position.coords;
+                     
+                     try {
+                        // Cập nhật vị trí trước
+                        await driverService.updateLocation(latitude, longitude);
+                        console.log('📍 Đã cập nhật vị trí:', { latitude, longitude });
+                        
+                        // Sau đó mới bật online
+                        const response = await orderService.setDriverOnline(checked);
+                        
+                        if (response.data?.success) {
+                           setIsOnline(checked);
+                           // Cập nhật vị trí trong state
+                           setCurrentLocation({ latitude, longitude });
+                           setLocationUpdatedAt(new Date());
+                           message.success('Đã bật trạng thái hoạt động và cập nhật vị trí');
+                           
+                           // Tự động cập nhật vị trí định kỳ khi online (mỗi 30 giây)
+                           if (window.locationUpdateInterval) {
+                              clearInterval(window.locationUpdateInterval);
+                           }
+                           window.locationUpdateInterval = setInterval(async () => {
+                              if (navigator.geolocation) {
+                                 navigator.geolocation.getCurrentPosition(
+                                    async (pos) => {
+                                       try {
+                                          await driverService.updateLocation(pos.coords.latitude, pos.coords.longitude);
+                                          // Cập nhật state
+                                          setCurrentLocation({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
+                                          setLocationUpdatedAt(new Date());
+                                          console.log('📍 Đã cập nhật vị trí định kỳ');
+                                       } catch (err) {
+                                          console.error('Lỗi cập nhật vị trí định kỳ:', err);
+                                       }
+                                    },
+                                    (err) => {
+                                       console.error('Lỗi lấy vị trí định kỳ:', err);
+                                    }
+                                 );
+                              }
+                           }, 30000); // 30 giây
+                        } else {
+                           message.error('Không thể cập nhật trạng thái hoạt động');
+                        }
+                     } catch (error) {
+                        console.error("Lỗi khi cập nhật vị trí hoặc trạng thái:", error);
+                        message.error("Lỗi khi cập nhật: " + (error.response?.data?.message || error.message));
+                     } finally {
+                        setUpdatingStatus(false);
+                     }
+                  },
+                  (error) => {
+                     console.error("Lỗi lấy vị trí:", error);
+                     // Vẫn cho phép bật online nếu không lấy được vị trí
+                     message.warning('Không thể lấy vị trí, vui lòng bật quyền truy cập vị trí để nhận đơn tốt hơn');
+                     
+                     // Bật online mà không có vị trí
+                     orderService.setDriverOnline(checked).then(response => {
+                        if (response.data?.success) {
+                           setIsOnline(checked);
+                           message.success('Đã bật trạng thái hoạt động (không có vị trí)');
+                        }
+                     }).catch(err => {
+                        message.error("Lỗi khi cập nhật trạng thái: " + (err.response?.data?.message || err.message));
+                     }).finally(() => {
+                        setUpdatingStatus(false);
+                     });
+                  },
+                  {
+                     enableHighAccuracy: true,
+                     timeout: 10000,
+                     maximumAge: 0
+                  }
+               );
+            } else {
+               // Browser không hỗ trợ Geolocation
+               message.warning('Trình duyệt không hỗ trợ lấy vị trí');
+               const response = await orderService.setDriverOnline(checked);
+               if (response.data?.success) {
+                  setIsOnline(checked);
+                  message.success('Đã bật trạng thái hoạt động');
+               }
+               setUpdatingStatus(false);
+            }
          } else {
-            message.error('Không thể cập nhật trạng thái hoạt động');
+            // Tắt online
+            if (window.locationUpdateInterval) {
+               clearInterval(window.locationUpdateInterval);
+               window.locationUpdateInterval = null;
+            }
+            
+            const response = await orderService.setDriverOnline(checked);
+            
+            if (response.data?.success) {
+               setIsOnline(checked);
+               message.success('Đã tắt trạng thái hoạt động');
+            } else {
+               message.error('Không thể cập nhật trạng thái hoạt động');
+            }
+            setUpdatingStatus(false);
          }
       } catch (error) {
          console.error("Lỗi khi cập nhật trạng thái hoạt động:", error);
          message.error("Lỗi khi cập nhật trạng thái hoạt động: " + (error.response?.data?.message || error.message));
-      } finally {
          setUpdatingStatus(false);
       }
    };
@@ -270,6 +382,73 @@ export default function VehicleManagement() {
       } finally {
          setUpdatingStatus(false);
       }
+   };
+
+   // Xử lý cập nhật vị trí hiện tại
+   const handleUpdateLocation = async () => {
+      if (!navigator.geolocation) {
+         message.error('Trình duyệt không hỗ trợ lấy vị trí');
+         return;
+      }
+
+      setUpdatingLocation(true);
+
+      navigator.geolocation.getCurrentPosition(
+         async (position) => {
+            const { latitude, longitude } = position.coords;
+            
+            try {
+               const response = await driverService.updateLocation(latitude, longitude);
+               
+               if (response.data?.success) {
+                  setCurrentLocation({ latitude, longitude });
+                  setLocationUpdatedAt(new Date());
+                  message.success('Cập nhật vị trí thành công');
+                  
+                  // Cập nhật driverInfo
+                  if (driverInfo) {
+                     setDriverInfo({
+                        ...driverInfo,
+                        currentLocation: {
+                           type: 'Point',
+                           coordinates: [longitude, latitude]
+                        },
+                        locationUpdatedAt: new Date()
+                     });
+                  }
+               } else {
+                  message.error('Không thể cập nhật vị trí');
+               }
+            } catch (error) {
+               console.error("Lỗi khi cập nhật vị trí:", error);
+               message.error("Lỗi khi cập nhật vị trí: " + (error.response?.data?.message || error.message));
+            } finally {
+               setUpdatingLocation(false);
+            }
+         },
+         (error) => {
+            console.error("Lỗi lấy vị trí:", error);
+            let errorMessage = 'Không thể lấy vị trí';
+            switch (error.code) {
+               case error.PERMISSION_DENIED:
+                  errorMessage = 'Bạn đã từ chối quyền truy cập vị trí. Vui lòng bật quyền trong cài đặt trình duyệt.';
+                  break;
+               case error.POSITION_UNAVAILABLE:
+                  errorMessage = 'Thông tin vị trí không khả dụng';
+                  break;
+               case error.TIMEOUT:
+                  errorMessage = 'Hết thời gian chờ lấy vị trí';
+                  break;
+            }
+            message.error(errorMessage);
+            setUpdatingLocation(false);
+         },
+         {
+            enableHighAccuracy: true,
+            timeout: 10000,
+            maximumAge: 0
+         }
+      );
    };
 
    // Kiểm tra xem có xe nào đang hoạt động không
@@ -515,6 +694,71 @@ export default function VehicleManagement() {
                            className="mt-4"
                         />
                      )}
+                  </div>
+               </Card>
+
+               {/* Current Location */}
+               <Card
+                  className="mb-4 shadow-sm"
+                  title={
+                     <span className="text-lg font-semibold flex items-center">
+                        <AimOutlined className="mr-2 text-blue-500" />
+                        Vị trí hiện tại
+                     </span>
+                  }
+               >
+                  <div className="space-y-4">
+                     {currentLocation ? (
+                        <>
+                           <div className="bg-blue-50 p-4 rounded-lg">
+                              <div className="flex items-center justify-between mb-2">
+                                 <span className="text-sm font-medium text-gray-600">Tọa độ:</span>
+                                 <Tag color="blue">
+                                    {currentLocation.latitude.toFixed(6)}, {currentLocation.longitude.toFixed(6)}
+                                 </Tag>
+                              </div>
+                              {locationUpdatedAt && (
+                                 <div className="text-xs text-gray-500 mt-2">
+                                    Cập nhật lần cuối: {new Date(locationUpdatedAt).toLocaleString('vi-VN')}
+                                 </div>
+                              )}
+                           </div>
+                           <Button
+                              type="primary"
+                              icon={<ReloadOutlined />}
+                              onClick={handleUpdateLocation}
+                              loading={updatingLocation}
+                              block
+                              className="bg-blue-600"
+                           >
+                              Cập nhật vị trí
+                           </Button>
+                        </>
+                     ) : (
+                        <>
+                           <Alert
+                              message="Chưa có vị trí"
+                              description="Vị trí của bạn sẽ được tự động cập nhật khi bật online. Bạn cũng có thể cập nhật thủ công."
+                              type="info"
+                              showIcon
+                              className="mb-4"
+                           />
+                           <Button
+                              type="primary"
+                              icon={<AimOutlined />}
+                              onClick={handleUpdateLocation}
+                              loading={updatingLocation}
+                              block
+                              className="bg-blue-600"
+                           >
+                              Lấy vị trí hiện tại
+                           </Button>
+                        </>
+                     )}
+                     
+                     <div className="text-xs text-gray-500 text-center pt-2 border-t">
+                        💡 Vị trí của bạn giúp hệ thống tìm đơn hàng gần nhất
+                     </div>
                   </div>
                </Card>
 

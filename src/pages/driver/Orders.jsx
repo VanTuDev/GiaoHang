@@ -37,6 +37,7 @@ import {
 import { orderService } from '../../features/orders/api/orderService';
 import { paymentsService } from '../../features/orders/api/paymentsService';
 import { feedbackService } from '../../features/feedback/api/feedbackService';
+import { driverService } from '../../features/driver/api/driverService';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import FeedbackDisplay from '../user/components/FeedbackDisplay';
 import ReportViolationModal from '../user/components/ReportViolationModal';
@@ -249,60 +250,83 @@ export default function DriverOrders() {
       // Tránh kết nối nhiều lần
       if (socketRef.current) return;
 
-      // Lấy Socket.IO URL từ biến môi trường
-      let SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:8080';
+      // Lấy driverId trước khi kết nối socket
+      const setupSocket = async () => {
+         try {
+            // Lấy thông tin tài xế để có driverId
+            const driverInfoRes = await driverService.getDriverInfo();
+            const driverId = driverInfoRes.data?.data?._id;
+            
+            if (!driverId) {
+               console.error('❌ [Socket] Không thể lấy driverId');
+               return;
+            }
 
-      // Trong DEV mode: Nếu truy cập từ IP (không phải localhost) và SOCKET_URL chứa localhost
-      // thì tự động thay localhost bằng IP hiện tại để hoạt động với mobile
-      if (import.meta.env.DEV && typeof window !== 'undefined') {
-         const currentHost = window.location.hostname;
-         if (currentHost !== 'localhost' && currentHost !== '127.0.0.1' && SOCKET_URL.includes('localhost')) {
-            // Thay localhost bằng IP hiện tại, giữ nguyên port
-            SOCKET_URL = SOCKET_URL.replace('localhost', currentHost).replace('127.0.0.1', currentHost);
-            console.log('🔧 [DEV MODE] Socket.IO URL đã được tự động chuyển từ localhost sang:', SOCKET_URL);
+            // Lấy Socket.IO URL từ biến môi trường
+            let SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:8080';
+
+            // Trong DEV mode: Nếu truy cập từ IP (không phải localhost) và SOCKET_URL chứa localhost
+            // thì tự động thay localhost bằng IP hiện tại để hoạt động với mobile
+            if (import.meta.env.DEV && typeof window !== 'undefined') {
+               const currentHost = window.location.hostname;
+               if (currentHost !== 'localhost' && currentHost !== '127.0.0.1' && SOCKET_URL.includes('localhost')) {
+                  // Thay localhost bằng IP hiện tại, giữ nguyên port
+                  SOCKET_URL = SOCKET_URL.replace('localhost', currentHost).replace('127.0.0.1', currentHost);
+                  console.log('🔧 [DEV MODE] Socket.IO URL đã được tự động chuyển từ localhost sang:', SOCKET_URL);
+               }
+            }
+
+            const socket = io(SOCKET_URL, { transports: ['websocket'], withCredentials: false });
+            socketRef.current = socket;
+
+            socket.on('connect', () => {
+               setSocketConnected(true);
+               // Join room cho tài xế với driverId thực tế
+               socket.emit('driver:join', driverId.toString());
+               console.log(`✅ [Socket] Driver ${driverId} đã join room "drivers" và "driver:${driverId}"`);
+            });
+
+            socket.on('disconnect', () => {
+               setSocketConnected(false);
+            });
+
+            socket.on('order:available:new', (payload) => {
+               console.log('\n📨 [FRONTEND] ========== NHẬN SOCKET EVENT ==========');
+               console.log('📥 [FRONTEND] Socket event: order:available:new', payload);
+               console.log('📋 [FRONTEND] Active tab hiện tại:', activeTabRef.current);
+
+               // Thông báo có đơn hàng mới
+               message.info({
+                  content: 'Có đơn hàng mới! Đang tải danh sách...',
+                  duration: 3
+               });
+
+               // Luôn refetch để đảm bảo có data mới nhất
+               // Kiểm tra tab hiện tại và tự động refetch nếu đang ở tab "available"
+               if (activeTabRef.current === 'available') {
+                  // Tự động refetch để hiển thị đơn mới ngay lập tức
+                  console.log('🔄 [FRONTEND] Đang ở tab "available", refetch ngay...');
+                  refetchAvailableOrders();
+               } else {
+                  // Nếu đang ở tab khác, tăng badge count và vẫn refetch để cập nhật count chính xác
+                  console.log('📊 [FRONTEND] Đang ở tab khác, refetch để cập nhật count...');
+                  refetchAvailableOrders(); // Vẫn refetch để cập nhật count chính xác
+               }
+               console.log('✅ [FRONTEND] ===========================================\n');
+            });
+         } catch (error) {
+            console.error('❌ [Socket] Lỗi khi setup socket:', error);
          }
-      }
+      };
 
-      const socket = io(SOCKET_URL, { transports: ['websocket'], withCredentials: false });
-      socketRef.current = socket;
-
-      socket.on('connect', () => {
-         setSocketConnected(true);
-         // Join room cho tài xế
-         socket.emit('driver:join', 'me');
-      });
-
-      socket.on('disconnect', () => {
-         setSocketConnected(false);
-      });
-
-      socket.on('order:available:new', (payload) => {
-         console.log('\n📨 [FRONTEND] ========== NHẬN SOCKET EVENT ==========');
-         console.log('📥 [FRONTEND] Socket event: order:available:new', payload);
-         console.log('📋 [FRONTEND] Active tab hiện tại:', activeTabRef.current);
-
-         // Thông báo có đơn hàng mới
-         message.info({
-            content: 'Có đơn hàng mới! Đang tải danh sách...',
-            duration: 3
-         });
-
-         // Luôn refetch để đảm bảo có data mới nhất
-         // Kiểm tra tab hiện tại và tự động refetch nếu đang ở tab "available"
-         if (activeTabRef.current === 'available') {
-            // Tự động refetch để hiển thị đơn mới ngay lập tức
-            console.log('🔄 [FRONTEND] Đang ở tab "available", refetch ngay...');
-            refetchAvailableOrders();
-         } else {
-            // Nếu đang ở tab khác, tăng badge count và vẫn refetch để cập nhật count chính xác
-            console.log('📊 [FRONTEND] Đang ở tab khác, refetch để cập nhật count...');
-            refetchAvailableOrders(); // Vẫn refetch để cập nhật count chính xác
-         }
-         console.log('✅ [FRONTEND] ===========================================\n');
-      });
+      setupSocket();
 
       return () => {
-         try { socket.disconnect(); } catch { }
+         try { 
+            if (socketRef.current) {
+               socketRef.current.disconnect();
+            }
+         } catch { }
          socketRef.current = null;
       };
    }, []); // Chỉ chạy một lần khi mount

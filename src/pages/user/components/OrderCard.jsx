@@ -168,7 +168,7 @@ export default function OrderCard({ order, onViewDetail, onOpenFeedback, onOpenR
                      <ClockCircleOutlined className="text-yellow-600 text-xl animate-pulse" />
                   </div>
                   <div>
-                     <p className="font-medium text-gray-800">Đang tìm tài xế phù hợp</p>
+                     <p className="font-medium text-gray-800">Đang đợi tài xế chấp nhận đơn hàng</p>
                      <p className="text-xs text-gray-600 mt-1">Thời gian chờ dự kiến: 5-10 phút</p>
                   </div>
                </div>

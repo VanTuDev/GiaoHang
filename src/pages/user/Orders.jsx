@@ -33,18 +33,46 @@ export default function OrdersPage() {
    const [cancelReason, setCancelReason] = useState('');
    const [cancelling, setCancelling] = useState(false);
 
-   // Tải danh sách đơn hàng
+   // Tải danh sách đơn hàng - chỉ hiển thị đơn đang hoạt động và đã hoàn thành
    useEffect(() => {
       const fetchOrders = async () => {
          setLoading(true);
          setError(null);
 
          try {
-            const status = statusFilter !== "all" ? statusFilter : undefined;
-            const response = await orderService.getMyOrders({ status });
+            // Lấy tất cả đơn hàng
+            const response = await orderService.getMyOrders({});
 
             if (response.data?.success) {
-               setOrders(response.data.data || []);
+               let allOrders = response.data.data || [];
+               
+               // Chỉ lọc các đơn có status InProgress hoặc Completed
+               // (không hiển thị Created - đơn đang tìm tài xế)
+               const filteredOrders = allOrders.filter(order => {
+                  // Lấy status từ order hoặc từ items
+                  const orderStatus = order.status;
+                  
+                  // Nếu order có items, kiểm tra xem có item nào đã được nhận chưa
+                  if (order.items && order.items.length > 0) {
+                     // Nếu có item nào có status khác Created, thì hiển thị
+                     const hasActiveItems = order.items.some(item => 
+                        item.status && item.status !== 'Created'
+                     );
+                     
+                     // Hoặc nếu order status là InProgress hoặc Completed
+                     if (orderStatus === 'InProgress' || orderStatus === 'Completed') {
+                        return true;
+                     }
+                     
+                     // Nếu có item đã được nhận (Accepted, PickedUp, Delivering, Delivered)
+                     return hasActiveItems;
+                  }
+                  
+                  // Nếu không có items, chỉ hiển thị nếu status là InProgress hoặc Completed
+                  return orderStatus === 'InProgress' || orderStatus === 'Completed';
+               });
+               
+               setOrders(filteredOrders);
             } else {
                setError("Không thể tải danh sách đơn hàng");
             }

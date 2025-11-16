@@ -1,17 +1,21 @@
 "use client"
 
-import React, { useState, useEffect } from "react"
+import React, { useState, useEffect, useRef } from "react"
 import { Form, message } from "antd"
 import { useLocation, useNavigate } from "react-router-dom"
+import { io } from 'socket.io-client'
 
 import VehicleDetailModal from "./modal/VehicleDetailModal"
 import SearchFilters from "./components/SearchFilters"
 import VehicleGrid from "./components/VehicleGrid"
 import OrderSummary from "./components/OrderSummary"
 import OrderForm from "./components/OrderForm"
+import VehicleTypeSelector from "./components/VehicleTypeSelector"
+import { Card } from "antd"
 import { vehicleService } from "../../features/vehicles/api/vehicleService"
 import { orderService } from "../../features/orders/api/orderService"
 import { formatCurrency } from "../../utils/formatters"
+import useLocalUser from "../../authentication/hooks/useLocalUser"
 
 export default function OrderCreate() {
    const [form] = Form.useForm();
@@ -36,6 +40,10 @@ export default function OrderCreate() {
    const [submitting, setSubmitting] = useState(false);
    const [imageList, setImageList] = useState([]);
    const [imageUploading, setImageUploading] = useState(false);
+   const [createdOrderId, setCreatedOrderId] = useState(null);
+   const [findingDrivers, setFindingDrivers] = useState(false);
+   const user = useLocalUser();
+   const socketRef = useRef(null);
 
 
    // Tải danh sách xe
@@ -116,28 +124,47 @@ export default function OrderCreate() {
       setSelectedVehicle(null);
    };
 
-   // Xử lý chọn xe để đặt
-   const handleSelectVehicle = (vehicle) => {
-      // Kiểm tra xem xe đã được chọn chưa
-      const exists = orderItems.some(item => item.vehicleId === vehicle._id);
+   // State để lưu khoảng cách được tính tự động
+   const [calculatedDistance, setCalculatedDistance] = useState(null);
 
-      if (exists) {
-         message.warning("Xe này đã được thêm vào đơn hàng");
-         return;
+   // Xử lý khi khoảng cách thay đổi từ OrderForm
+   const handleDistanceChange = (distance) => {
+      setCalculatedDistance(distance);
+      
+      // Cập nhật khoảng cách cho tất cả orderItems nếu có khoảng cách hợp lệ
+      if (distance && distance > 0 && orderItems.length > 0) {
+         const updatedItems = orderItems.map(item => ({
+            ...item,
+            distanceKm: distance
+         }));
+         setOrderItems(updatedItems);
       }
+   };
 
-      // Thêm xe vào danh sách đặt
+   // Xử lý thêm loại xe vào đơn hàng (không cần chọn xe cụ thể)
+   const handleAddVehicleType = (vehicleType, maxWeightKg, pricePerKm) => {
+      // Sử dụng khoảng cách đã tính nếu có, nếu không thì dùng mặc định
+      const distanceKm = calculatedDistance && calculatedDistance > 0 
+         ? calculatedDistance 
+         : 10; // Mặc định là 10km
+
+      // Thêm loại xe vào danh sách đặt
       setOrderItems([...orderItems, {
-         vehicleId: vehicle._id,
-         vehicleType: vehicle.type,
-         vehicleInfo: vehicle,
-         weightKg: vehicle.maxWeightKg / 2, // Mặc định là 1/2 trọng tải tối đa
-         distanceKm: 10, // Mặc định là 10km
+         vehicleId: null, // Không cần vehicleId cụ thể
+         vehicleType: vehicleType,
+         vehicleInfo: { type: vehicleType, maxWeightKg, pricePerKm }, // Thông tin loại xe
+         weightKg: maxWeightKg / 2, // Mặc định là 1/2 trọng tải tối đa
+         distanceKm: distanceKm,
          loadingService: false,
          insurance: false
       }]);
 
-      message.success("Đã thêm xe vào đơn hàng");
+      message.success("Đã thêm loại xe vào đơn hàng");
+   };
+
+   // Xử lý chọn xe để đặt (giữ lại để tương thích)
+   const handleSelectVehicle = (vehicle) => {
+      handleAddVehicleType(vehicle.type, vehicle.maxWeightKg, vehicle.pricePerKm);
    };
 
    // Xử lý xóa xe khỏi đơn hàng
@@ -206,96 +233,118 @@ export default function OrderCreate() {
       window.scrollTo({ top: 0, behavior: 'smooth' });
    };
 
-   // Xử lý gửi đơn hàng
-   const handleSubmitOrder = async (values) => {
+   // Setup Socket.IO để nhận updates khi tài xế nhận đơn
+   useEffect(() => {
+      if (!createdOrderId || !user?._id) return
+
+      let SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:8080'
+      
+      if (import.meta.env.DEV && typeof window !== 'undefined') {
+         const currentHost = window.location.hostname
+         if (currentHost !== 'localhost' && currentHost !== '127.0.0.1' && SOCKET_URL.includes('localhost')) {
+            SOCKET_URL = SOCKET_URL.replace('localhost', currentHost).replace('127.0.0.1', currentHost)
+         }
+      }
+
+      const socket = io(SOCKET_URL, { transports: ['websocket'], withCredentials: false })
+      socketRef.current = socket
+
+      socket.on('connect', () => {
+         socket.emit('customer:join', user._id)
+         console.log('✅ Customer đã join room')
+      })
+
+      // Lắng nghe khi tài xế nhận đơn
+      socket.on('order:accepted', (payload) => {
+         console.log('📨 Nhận được order:accepted:', payload)
+         if (payload.orderId === createdOrderId) {
+            message.success(`Tài xế ${payload.driverName} đã nhận đơn của bạn!`)
+            // Chuyển sang màn hình tracking
+            setTimeout(() => {
+               navigate(`/dashboard/order-tracking/${createdOrderId}`)
+            }, 1500)
+         }
+      })
+
+      return () => {
+         socket.disconnect()
+      }
+   }, [createdOrderId, user?._id, navigate])
+
+   // Xử lý tìm tài xế (thay vì submit trực tiếp)
+   const handleFindDrivers = async (values) => {
       if (orderItems.length === 0) {
-         message.error("Vui lòng chọn ít nhất một xe");
+         message.error("Vui lòng chọn ít nhất một loại xe");
          return;
       }
 
-      setSubmitting(true);
+      setFindingDrivers(true);
 
       try {
-         const { pickupAddress, dropoffAddress, customerNote, paymentBy = "sender" } = values;
+         const { 
+            pickupAddress, 
+            dropoffAddress, 
+            customerNote, 
+            paymentBy = "sender",
+            pickupLat,
+            pickupLng,
+            dropoffLat,
+            dropoffLng
+         } = values;
+
+         // Validate tọa độ
+         if (!pickupLat || !pickupLng) {
+            message.error("Vui lòng chọn điểm đón trên bản đồ");
+            setFindingDrivers(false);
+            return;
+         }
 
          // Chuẩn bị dữ liệu đơn hàng
          const orderData = {
             pickupAddress,
             dropoffAddress,
             customerNote,
-            paymentMethod: "Cash", // Mặc định là tiền mặt
-            paymentBy, // Người trả tiền: "sender" hoặc "receiver"
+            paymentMethod: "Cash",
+            paymentBy,
+            pickupLocation: {
+               type: "Point",
+               coordinates: [pickupLng, pickupLat]
+            },
+            ...(dropoffLat && dropoffLng && {
+               dropoffLocation: {
+                  type: "Point",
+                  coordinates: [dropoffLng, dropoffLat]
+               }
+            }),
             items: orderItems.map(item => ({
                vehicleType: item.vehicleType,
-               vehicleId: item.vehicleId, // Gửi vehicleId để backend có thể lấy pricePerKm
-               pricePerKm: item.vehicleInfo?.pricePerKm || null, // Gửi pricePerKm từ xe đã chọn
+               vehicleId: item.vehicleId,
+               pricePerKm: item.vehicleInfo?.pricePerKm || null,
                weightKg: item.weightKg,
                distanceKm: item.distanceKm,
                loadingService: item.loadingService,
                insurance: item.insurance,
-               itemPhotos: [] // Trong thực tế, bạn sẽ gửi URLs của ảnh đã upload
+               itemPhotos: []
             }))
          };
 
-         console.log('\n🚀 [FRONTEND] ========== GỬI ĐƠN HÀNG ==========');
-         console.log('📤 [FRONTEND] Order data sẽ gửi:', {
-            pickupAddress,
-            dropoffAddress,
-            itemsCount: orderData.items.length,
-            items: orderData.items.map((item, idx) => ({
-               index: idx + 1,
-               vehicleType: item.vehicleType,
-               vehicleTypeType: typeof item.vehicleType,
-               weightKg: item.weightKg,
-               weightKgType: typeof item.weightKg,
-               distanceKm: item.distanceKm,
-               loadingService: item.loadingService,
-               insurance: item.insurance
-            }))
-         });
-         console.log('📋 [FRONTEND] Chi tiết từng item trong orderItems:', orderItems.map((item, idx) => ({
-            index: idx + 1,
-            vehicleId: item.vehicleId,
-            vehicleType: item.vehicleType,
-            vehicleInfo: item.vehicleInfo ? {
-               _id: item.vehicleInfo._id,
-               type: item.vehicleInfo.type,
-               maxWeightKg: item.vehicleInfo.maxWeightKg,
-               pricePerKm: item.vehicleInfo.pricePerKm,
-               status: item.vehicleInfo.status
-            } : null,
-            weightKg: item.weightKg,
-            distanceKm: item.distanceKm
-         })));
-
-         // Gửi đơn hàng
-         console.log('📡 [FRONTEND] Đang gọi API createOrder...');
+         // Tạo đơn hàng
          const response = await orderService.createOrder(orderData);
-         console.log('📥 [FRONTEND] Response từ API:', {
-            success: response.data?.success,
-            orderId: response.data?.data?._id,
-            orderStatus: response.data?.data?.status,
-            items: response.data?.data?.items?.map(item => ({
-               vehicleType: item.vehicleType,
-               weightKg: item.weightKg,
-               status: item.status,
-               driverId: item.driverId
-            }))
-         });
-         console.log('✅ [FRONTEND] ===========================================\n');
 
          if (response.data?.success) {
-            message.success("Đặt đơn hàng thành công");
-            // Chuyển hướng đến trang danh sách đơn hàng
-            navigate("/dashboard/orders");
+            const orderId = response.data.data._id;
+            setCreatedOrderId(orderId);
+            message.success("Đã tạo đơn hàng, đang tìm tài xế gần bạn...");
+            setFindingDrivers(false);
+            // Không navigate ngay, đợi tài xế nhận đơn
          } else {
-            message.error("Lỗi khi đặt đơn hàng: " + (response.data?.message || "Vui lòng thử lại"));
+            message.error("Lỗi khi tạo đơn hàng: " + (response.data?.message || "Vui lòng thử lại"));
+            setFindingDrivers(false);
          }
       } catch (error) {
-         console.error("Lỗi khi đặt đơn hàng:", error);
-         message.error("Lỗi khi đặt đơn hàng: " + (error.response?.data?.message || error.message || "Vui lòng thử lại"));
-      } finally {
-         setSubmitting(false);
+         console.error("Lỗi khi tìm tài xế:", error);
+         message.error("Lỗi khi tìm tài xế: " + (error.response?.data?.message || error.message || "Vui lòng thử lại"));
+         setFindingDrivers(false);
       }
    };
 
@@ -316,15 +365,44 @@ export default function OrderCreate() {
          {orderItems.length > 0 && (
             <OrderForm
                form={form}
-               onSubmit={handleSubmitOrder}
-               submitting={submitting}
+               onSubmit={handleFindDrivers}
+               submitting={findingDrivers}
                totalPrice={calculateTotalPrice()}
                formatCurrency={formatCurrency}
+               onDistanceChange={handleDistanceChange}
+               buttonText={createdOrderId ? "Đang tìm tài xế..." : "Tìm tài xế"}
+               disabled={!!createdOrderId}
             />
          )}
 
-         {/* Search Filters */}
-         <SearchFilters
+         {/* Hiển thị trạng thái đang tìm tài xế */}
+         {createdOrderId && (
+            <Card className="mt-4">
+               <div className="text-center py-6">
+                  <div className="text-2xl font-semibold mb-2 text-blue-600">Đang tìm tài xế...</div>
+                  <div className="text-gray-600 mb-4">
+                     Hệ thống đang quét các tài xế gần bạn trong bán kính 2km
+                  </div>
+                  <div className="text-sm text-gray-500">
+                     Vui lòng đợi tài xế xác nhận nhận đơn
+                  </div>
+               </div>
+            </Card>
+         )}
+
+         {/* Chọn loại xe - Đơn giản hóa: không cần chọn xe cụ thể */}
+         {orderItems.length === 0 && (
+            <div className="mb-6">
+               <h2 className="text-xl font-semibold mb-4">Chọn loại xe cần vận chuyển</h2>
+               <p className="text-gray-600 mb-4">
+                  Hệ thống sẽ tự động tìm tài xế gần nhất phù hợp với yêu cầu của bạn
+               </p>
+               <VehicleTypeSelector onSelectType={handleAddVehicleType} />
+            </div>
+         )}
+
+         {/* Vehicle Grid - Ẩn đi vì không cần chọn xe cụ thể */}
+         {/* <SearchFilters
             searchTerm={searchTerm}
             setSearchTerm={setSearchTerm}
             selectedDistrict={selectedDistrict}
@@ -338,14 +416,13 @@ export default function OrderCreate() {
             onScrollToTop={handleScrollToTop}
          />
 
-         {/* Vehicle Grid */}
          <VehicleGrid
             vehicles={filteredVehicles}
             loading={loading}
             onViewDetails={handleOpenModal}
             onSelectVehicle={handleSelectVehicle}
             selectedVehicleIds={orderItems.map(item => item.vehicleId)}
-         />
+         /> */}
 
          {/* Vehicle Detail Modal */}
          <VehicleDetailModal

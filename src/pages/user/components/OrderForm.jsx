@@ -1,10 +1,11 @@
-import React, { useMemo, useRef, useState } from "react";
-import { EnvironmentOutlined, AimOutlined, SearchOutlined, DollarOutlined } from "@ant-design/icons";
-import { Form, Input, Button, Card, Row, Col, Segmented, Space, Radio } from "antd";
+import React, { useMemo, useRef, useState, useEffect, useCallback } from "react";
+import { EnvironmentOutlined, AimOutlined, SearchOutlined, DollarOutlined, LoadingOutlined } from "@ant-design/icons";
+import { Form, Input, InputNumber, Button, Card, Row, Col, Segmented, Space, Radio, message, Spin } from "antd";
 // OpenStreetMap via react-leaflet
 import { MapContainer, TileLayer, Marker, useMapEvents } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
+import { calculateRoadDistance } from "../../../utils/distance";
 
 const { TextArea } = Input;
 
@@ -13,7 +14,11 @@ const OrderForm = ({
    onSubmit,
    submitting,
    totalPrice,
-   formatCurrency
+   formatCurrency,
+   onDistanceChange, // Callback để truyền khoảng cách về component cha
+   buttonText = "Đặt đơn hàng",
+   disabled = false,
+   priceBreakdown = null // Breakdown giá chi tiết từ component cha
 }) => {
    // icon marker tuỳ biến nhỏ gọn
    const markerIcon = useMemo(() => new L.Icon({
@@ -28,8 +33,17 @@ const OrderForm = ({
 
    const [activePoint, setActivePoint] = useState("pickup"); // pickup | dropoff
    const [searchQuery, setSearchQuery] = useState("");
+   const [calculatingDistance, setCalculatingDistance] = useState(false);
+   const [currentDistance, setCurrentDistance] = useState(null); // Khoảng cách hiện tại (km)
+   const debounceTimerRef = useRef(null);
 
    const defaultCenter = useMemo(() => ({ lat: 16.047079, lng: 108.206230 }), []); // Đà Nẵng
+
+   // Sử dụng Form.useWatch để theo dõi thay đổi tọa độ
+   const pickupLat = Form.useWatch("pickupLat", form);
+   const pickupLng = Form.useWatch("pickupLng", form);
+   const dropoffLat = Form.useWatch("dropoffLat", form);
+   const dropoffLng = Form.useWatch("dropoffLng", form);
 
    const getPoint = (key) => {
       const lat = form.getFieldValue(`${key}Lat`);
@@ -41,6 +55,86 @@ const OrderForm = ({
    const setPoint = (key, lat, lng) => {
       form.setFieldsValue({ [`${key}Lat`]: lat, [`${key}Lng`]: lng });
    };
+
+   // Tính khoảng cách khi có đủ cả hai điểm
+   const calculateDistance = useCallback(async () => {
+      const pickup = getPoint("pickup");
+      const dropoff = getPoint("dropoff");
+
+      if (!pickup || !dropoff) {
+         if (onDistanceChange) {
+            onDistanceChange(null);
+         }
+         return;
+      }
+
+      setCalculatingDistance(true);
+      try {
+         const distance = await calculateRoadDistance(
+            pickup.lat,
+            pickup.lng,
+            dropoff.lat,
+            dropoff.lng
+         );
+         
+         if (distance > 0) {
+            setCurrentDistance(distance); // Lưu khoảng cách để hiển thị
+            if (onDistanceChange) {
+               onDistanceChange(distance);
+            }
+         } else {
+            setCurrentDistance(null);
+         }
+      } catch (error) {
+         console.error("Lỗi khi tính khoảng cách:", error);
+         message.error("Không thể tính khoảng cách. Vui lòng thử lại.");
+         setCurrentDistance(null);
+      } finally {
+         setCalculatingDistance(false);
+      }
+   }, [onDistanceChange, form]);
+
+   // Theo dõi thay đổi tọa độ và tự động tính khoảng cách
+   useEffect(() => {
+      // Clear timer trước đó nếu có
+      if (debounceTimerRef.current) {
+         clearTimeout(debounceTimerRef.current);
+      }
+
+      // Kiểm tra nếu có đủ cả hai điểm
+      if (pickupLat && pickupLng && dropoffLat && dropoffLng) {
+         // Debounce để tránh tính toán quá nhiều lần
+         debounceTimerRef.current = setTimeout(() => {
+            calculateDistance();
+         }, 500);
+      } else {
+         // Nếu thiếu điểm, đặt khoảng cách về null
+         if (onDistanceChange) {
+            onDistanceChange(null);
+         }
+      }
+
+      return () => {
+         if (debounceTimerRef.current) {
+            clearTimeout(debounceTimerRef.current);
+         }
+      };
+   }, [pickupLat, pickupLng, dropoffLat, dropoffLng, calculateDistance, onDistanceChange]);
+
+   // Cleanup timers khi component unmount
+   useEffect(() => {
+      return () => {
+         if (debounceTimerRef.current) {
+            clearTimeout(debounceTimerRef.current);
+         }
+         if (addressGeocodeTimerRef.current.pickup) {
+            clearTimeout(addressGeocodeTimerRef.current.pickup);
+         }
+         if (addressGeocodeTimerRef.current.dropoff) {
+            clearTimeout(addressGeocodeTimerRef.current.dropoff);
+         }
+      };
+   }, []);
 
    const reverseGeocode = async (lat, lng) => {
       try {
@@ -88,6 +182,39 @@ const OrderForm = ({
       if (res.label) form.setFieldsValue({ [field]: res.label });
    };
 
+   // Geocode địa chỉ khi người dùng nhập thủ công
+   const handleAddressGeocode = async (address, fieldType) => {
+      if (!address || address.trim().length < 5) return; // Chỉ geocode nếu địa chỉ đủ dài
+
+      try {
+         const res = await geocode(address);
+         if (res) {
+            setPoint(fieldType, res.lat, res.lng);
+            // Cập nhật lại địa chỉ với format từ geocoding nếu cần
+            if (res.label && res.label !== address) {
+               form.setFieldsValue({ [fieldType === "pickup" ? "pickupAddress" : "dropoffAddress"]: res.label });
+            }
+         }
+      } catch (error) {
+         console.error("Lỗi khi geocode địa chỉ:", error);
+      }
+   };
+
+   // Debounce cho việc geocode địa chỉ khi người dùng nhập
+   const addressGeocodeTimerRef = useRef({ pickup: null, dropoff: null });
+
+   const handleAddressChange = (fieldType, address) => {
+      // Clear timer trước đó
+      if (addressGeocodeTimerRef.current[fieldType]) {
+         clearTimeout(addressGeocodeTimerRef.current[fieldType]);
+      }
+
+      // Đợi 1.5 giây sau khi người dùng ngừng nhập rồi mới geocode
+      addressGeocodeTimerRef.current[fieldType] = setTimeout(() => {
+         handleAddressGeocode(address, fieldType);
+      }, 1500);
+   };
+
    return (
       <Card title="Thông tin đơn hàng" className="shadow-sm">
          <Form
@@ -112,6 +239,16 @@ const OrderForm = ({
                      <Input
                         prefix={<EnvironmentOutlined />}
                         placeholder="Nhập hoặc chọn trên bản đồ"
+                        onBlur={(e) => {
+                           const address = e.target.value;
+                           if (address) {
+                              handleAddressGeocode(address, "pickup");
+                           }
+                        }}
+                        onChange={(e) => {
+                           const address = e.target.value;
+                           handleAddressChange("pickup", address);
+                        }}
                      />
                   </Form.Item>
                   <Form.Item
@@ -122,6 +259,16 @@ const OrderForm = ({
                      <Input
                         prefix={<EnvironmentOutlined />}
                         placeholder="Nhập hoặc chọn trên bản đồ"
+                        onBlur={(e) => {
+                           const address = e.target.value;
+                           if (address) {
+                              handleAddressGeocode(address, "dropoff");
+                           }
+                        }}
+                        onChange={(e) => {
+                           const address = e.target.value;
+                           handleAddressChange("dropoff", address);
+                        }}
                      />
                   </Form.Item>
 
@@ -177,6 +324,51 @@ const OrderForm = ({
                </Col>
             </Row>
 
+            {/* Hiển thị khoảng cách đường đi */}
+            {(currentDistance !== null || calculatingDistance) && (
+               <Card 
+                  size="small" 
+                  className="mb-4"
+                  style={{ backgroundColor: '#f0f9ff', borderColor: '#3b82f6' }}
+               >
+                  <div className="flex items-center justify-between">
+                     <div className="flex items-center gap-2">
+                        <EnvironmentOutlined className="text-blue-500" />
+                        <div>
+                           <div className="text-sm text-gray-600">Khoảng cách đường đi</div>
+                           {calculatingDistance ? (
+                              <div className="text-lg font-semibold text-blue-600 flex items-center gap-2">
+                                 <Spin size="small" indicator={<LoadingOutlined style={{ fontSize: 14 }} spin />} />
+                                 <span>Đang tính toán...</span>
+                              </div>
+                           ) : currentDistance !== null ? (
+                              <div className="text-lg font-semibold text-blue-600">
+                                 {currentDistance.toFixed(1)} km
+                              </div>
+                           ) : null}
+                        </div>
+                     </div>
+                  </div>
+               </Card>
+            )}
+
+            {/* Trọng tải hàng hóa */}
+            <Form.Item
+               name="weightKg"
+               label="Trọng tải hàng hóa (kg)"
+               rules={[
+                  { required: true, message: "Vui lòng nhập trọng tải hàng hóa" },
+                  { type: 'number', min: 1, message: "Trọng tải phải lớn hơn 0" }
+               ]}
+            >
+               <InputNumber
+                  min={1}
+                  placeholder="Nhập trọng tải hàng hóa (ví dụ: 1000)"
+                  style={{ width: '100%' }}
+                  addonAfter="kg"
+               />
+            </Form.Item>
+
             {/* Payment By - Người trả tiền */}
             <Form.Item
                name="paymentBy"
@@ -219,6 +411,44 @@ const OrderForm = ({
                />
             </Form.Item>
 
+            {/* Breakdown giá chi tiết */}
+            {priceBreakdown && (
+               <Card 
+                  size="small" 
+                  className="mb-4"
+                  title={
+                     <span className="text-sm font-semibold">
+                        <DollarOutlined className="mr-2" />
+                        Chi tiết tính toán giá
+                     </span>
+                  }
+                  style={{ backgroundColor: '#f9fafb' }}
+               >
+                  <div className="space-y-2 text-sm">
+                     <div className="flex justify-between items-center">
+                        <span className="text-gray-600">Khoảng cách:</span>
+                        <span className="font-medium">{priceBreakdown.distanceKm} km</span>
+                     </div>
+                     <div className="flex justify-between items-center">
+                        <span className="text-gray-600">Trọng tải:</span>
+                        <span className="font-medium">{priceBreakdown.weightKg} kg ({priceBreakdown.ton} tấn)</span>
+                     </div>
+                     <div className="flex justify-between items-center">
+                        <span className="text-gray-600">Giá/km:</span>
+                        <span className="font-medium text-blue-600">{formatCurrency(priceBreakdown.pricePerKm)}/km</span>
+                     </div>
+                     <div className="border-t pt-2 mt-2">
+                        <div className="flex justify-between items-center">
+                           <span className="text-gray-600">Phí vận chuyển ({priceBreakdown.distanceKm} km × {formatCurrency(priceBreakdown.pricePerKm)}/km):</span>
+                           <span className="font-semibold text-lg text-blue-600">
+                              {formatCurrency(priceBreakdown.distanceCost)}
+                           </span>
+                        </div>
+                     </div>
+                  </div>
+               </Card>
+            )}
+
             {/* Submit Button */}
             <div className="flex justify-between items-center mt-2">
                <div className="text-lg">
@@ -232,10 +462,11 @@ const OrderForm = ({
                   type="primary"
                   htmlType="submit"
                   loading={submitting}
+                  disabled={disabled}
                   className="bg-blue-600"
                   size="large"
                >
-                  Đặt đơn hàng
+                  {buttonText}
                </Button>
             </div>
          </Form>

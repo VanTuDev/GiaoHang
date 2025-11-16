@@ -48,14 +48,23 @@ const OrderSummary = ({
                               />
                            </div>
 
-                           {/* Distance Input */}
+                           {/* Distance Input - Read Only */}
                            <div className="mb-2">
-                              <label className="text-sm text-gray-600">Khoảng cách (km):</label>
+                              <label className="text-sm text-gray-600">
+                                 Khoảng cách (km):
+                                 <span className="text-xs text-blue-500 ml-1" title="Tự động tính từ địa chỉ lấy hàng và giao hàng">
+                                    (Tự động)
+                                 </span>
+                              </label>
                               <InputNumber
-                                 min={1}
+                                 min={0.1}
+                                 step={0.1}
+                                 precision={1}
                                  value={item.distanceKm}
-                                 onChange={(value) => onItemChange(index, "distanceKm", value)}
+                                 readOnly
+                                 disabled
                                  className="ml-2"
+                                 style={{ width: '100%' }}
                               />
                            </div>
                         </div>

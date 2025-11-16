@@ -1,166 +1,263 @@
 "use client"
 
-import React, { useState, useEffect } from "react"
-import { message } from "antd"
+import React, { useState, useEffect, useRef } from "react"
+import { Form, Card, App } from "antd"
+import { useLocation, useNavigate } from "react-router-dom"
+import { io } from 'socket.io-client'
 
-import VehicleDetailModal from "./modal/VehicleDetailModal"
-import SearchFilters from "./components/SearchFilters"
-import VehicleGrid from "./components/VehicleGrid"
-import VehicleStats from "./components/VehicleStats"
-import { vehicleService } from "../../features/vehicles/api/vehicleService"
+import OrderForm from "./components/OrderForm"
 import { orderService } from "../../features/orders/api/orderService"
+import { formatCurrency } from "../../utils/formatters"
+import useLocalUser from "../../authentication/hooks/useLocalUser"
 
 export default function BookVehicles() {
+   const { message: messageApi } = App.useApp();
+   const [form] = Form.useForm();
+   const navigate = useNavigate();
+   const location = useLocation();
+
    // States
-   const [loading, setLoading] = useState(false);
-   const [vehicles, setVehicles] = useState([]);
-   const [filteredVehicles, setFilteredVehicles] = useState([]);
-   const [searchTerm, setSearchTerm] = useState("");
-   const [selectedDistrict, setSelectedDistrict] = useState("all");
-   const [selectedType, setSelectedType] = useState("all");
-   const [selectedWeight, setSelectedWeight] = useState("all");
-   const [selectedVehicle, setSelectedVehicle] = useState(null);
-   const [isModalOpen, setIsModalOpen] = useState(false);
-   const [vehicleDetailLoading, setVehicleDetailLoading] = useState(false);
+   const [createdOrderId, setCreatedOrderId] = useState(null);
+   const [findingDrivers, setFindingDrivers] = useState(false);
+   const [calculatedDistance, setCalculatedDistance] = useState(null);
+   const [totalPrice, setTotalPrice] = useState(0);
+   const user = useLocalUser();
+   const socketRef = useRef(null);
 
-   // Stats states
-   const [stats, setStats] = useState({
-      totalVehicles: 0,
-      onlineDrivers: 0,
-      availableVehicles: 0,
-      totalOrders: 0
-   });
+   // Xử lý khi khoảng cách thay đổi từ OrderForm
+   const handleDistanceChange = (distance) => {
+      setCalculatedDistance(distance);
+   };
 
-   // Tải danh sách xe và thống kê
+   // Tính giá dựa trên form values - sử dụng Form.useWatch để theo dõi thay đổi
+   const weightKg = Form.useWatch('weightKg', form);
+   const [priceBreakdown, setPriceBreakdown] = useState(null); // Breakdown giá chi tiết
+   
    useEffect(() => {
-      const fetchData = async () => {
-         setLoading(true);
-         try {
-            // Fetch vehicles
-            const params = {};
-            if (selectedType !== "all") params.type = selectedType;
-            if (selectedWeight !== "all") params.weightKg = selectedWeight;
-            if (selectedDistrict !== "all") params.district = selectedDistrict;
-            params.onlineOnly = true;
-
-            const response = await vehicleService.listVehicles(params);
-            if (response.data?.success) {
-               setVehicles(response.data.data);
-               setFilteredVehicles(response.data.data);
-
-               // Calculate stats
-               const totalVehicles = response.data.data.length;
-               const onlineDrivers = new Set(response.data.data.map(v => v.driverId?._id)).size;
-               const availableVehicles = response.data.data.filter(v => v.status === 'Active').length;
-
-               setStats({
-                  totalVehicles,
-                  onlineDrivers,
-                  availableVehicles,
-                  totalOrders: 0 // Có thể fetch từ API orders nếu cần
-               });
-            } else {
-               message.error("Không thể tải danh sách xe");
-            }
-         } catch (error) {
-            console.error("Lỗi khi tải dữ liệu:", error);
-            message.error("Lỗi khi tải dữ liệu");
-         } finally {
-            setLoading(false);
-         }
-      };
-
-      fetchData();
-   }, [selectedType, selectedWeight, selectedDistrict]);
-
-   // Lọc xe theo từ khóa tìm kiếm
-   useEffect(() => {
-      if (!searchTerm.trim()) {
-         setFilteredVehicles(vehicles);
+      if (!weightKg || weightKg <= 0) {
+         setTotalPrice(0);
+         setPriceBreakdown(null);
          return;
       }
 
-      const filtered = vehicles.filter((vehicle) => {
-         const searchLower = searchTerm.toLowerCase();
-         const matchesType = vehicle.type?.toLowerCase().includes(searchLower);
-         const matchesDriver = vehicle.driverId?.userId?.name?.toLowerCase().includes(searchLower);
-         const matchesLicense = vehicle.licensePlate?.toLowerCase().includes(searchLower);
+      const distanceKm = calculatedDistance && calculatedDistance > 0 
+         ? calculatedDistance 
+         : null; // Không dùng mặc định nữa, đợi có khoảng cách thực tế
 
-         return matchesType || matchesDriver || matchesLicense;
+      if (!distanceKm) {
+         setTotalPrice(0);
+         setPriceBreakdown(null);
+         return;
+      }
+
+      // Tính giá theo trọng lượng (tấn)
+      const ton = Number(weightKg) / 1000;
+      let pricePerKm = 40000;
+      if (ton <= 1) pricePerKm = 40000;
+      else if (ton <= 3) pricePerKm = 60000;
+      else if (ton <= 5) pricePerKm = 80000;
+      else if (ton <= 10) pricePerKm = 100000;
+      else pricePerKm = 150000;
+
+      // Tính giá theo khoảng cách
+      const distanceCost = pricePerKm * distanceKm;
+      setTotalPrice(distanceCost);
+
+      // Lưu breakdown để hiển thị
+      setPriceBreakdown({
+         distanceKm: distanceKm.toFixed(1),
+         pricePerKm: pricePerKm,
+         distanceCost: distanceCost,
+         weightKg: Number(weightKg),
+         ton: ton.toFixed(2)
       });
+   }, [weightKg, calculatedDistance]);
 
-      setFilteredVehicles(filtered);
-   }, [searchTerm, vehicles]);
+   // Setup Socket.IO để nhận updates khi tài xế nhận đơn
+   useEffect(() => {
+      if (!createdOrderId || !user?._id) return
 
-   // Xử lý mở modal chi tiết xe
-   const handleOpenModal = (vehicle) => {
-      setSelectedVehicle(vehicle);
-      setVehicleDetailLoading(true);
-      setIsModalOpen(true);
+      let SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:8080'
+      
+      if (import.meta.env.DEV && typeof window !== 'undefined') {
+         const currentHost = window.location.hostname
+         if (currentHost !== 'localhost' && currentHost !== '127.0.0.1' && SOCKET_URL.includes('localhost')) {
+            SOCKET_URL = SOCKET_URL.replace('localhost', currentHost).replace('127.0.0.1', currentHost)
+         }
+      }
 
-      // Giả lập tải dữ liệu chi tiết
-      setTimeout(() => {
-         setVehicleDetailLoading(false);
-      }, 500);
-   };
+      const socket = io(SOCKET_URL, { transports: ['websocket'], withCredentials: false })
+      socketRef.current = socket
 
-   // Xử lý đóng modal
-   const handleCloseModal = () => {
-      setIsModalOpen(false);
-      setSelectedVehicle(null);
-   };
+      socket.on('connect', () => {
+         socket.emit('customer:join', user._id)
+         console.log('✅ Customer đã join room')
+      })
 
-   // Xử lý chọn xe để xem chi tiết (không có chức năng đặt hàng ở đây)
-   const handleSelectVehicle = (vehicle) => {
-      handleOpenModal(vehicle);
-   };
+      // Lắng nghe khi tài xế nhận đơn
+      socket.on('order:accepted', (payload) => {
+         console.log('📨 Nhận được order:accepted:', payload)
+         if (payload.orderId === createdOrderId) {
+            messageApi.success(`Tài xế ${payload.driverName} đã nhận đơn của bạn!`)
+            // Chuyển sang màn hình tracking
+            setTimeout(() => {
+               navigate(`/dashboard/order-tracking/${createdOrderId}`)
+            }, 1500)
+         }
+      })
 
-   // Scroll to top function
-   const handleScrollToTop = () => {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return () => {
+         socket.disconnect()
+      }
+   }, [createdOrderId, user?._id, navigate])
+
+   // Xử lý tìm tài xế (thay vì submit trực tiếp)
+   const handleFindDrivers = async (values) => {
+      const { 
+         pickupAddress, 
+         dropoffAddress, 
+         customerNote, 
+         paymentBy = "sender",
+         pickupLat,
+         pickupLng,
+         dropoffLat,
+         dropoffLng,
+         weightKg
+      } = values;
+
+      // Validate trọng tải
+      if (!weightKg || weightKg <= 0) {
+         messageApi.error("Vui lòng nhập trọng tải hàng hóa");
+         return;
+      }
+
+      // Validate tọa độ
+      if (!pickupLat || !pickupLng) {
+         messageApi.error("Vui lòng chọn điểm đón trên bản đồ");
+         return;
+      }
+
+      setFindingDrivers(true);
+
+      try {
+         // Tính khoảng cách - đảm bảo luôn có giá trị hợp lệ
+         let distanceKm = calculatedDistance && calculatedDistance > 0 
+            ? calculatedDistance 
+            : null;
+         
+         // Nếu chưa có khoảng cách, tính tạm thời dựa trên tọa độ (Haversine)
+         if (!distanceKm && pickupLat && pickupLng && dropoffLat && dropoffLng) {
+            const R = 6371; // Bán kính Trái Đất (km)
+            const dLat = (dropoffLat - pickupLat) * Math.PI / 180;
+            const dLon = (dropoffLng - pickupLng) * Math.PI / 180;
+            const a = 
+               Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+               Math.cos(pickupLat * Math.PI / 180) * Math.cos(dropoffLat * Math.PI / 180) *
+               Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            distanceKm = R * c;
+         }
+         
+         // Nếu vẫn không có khoảng cách, dùng mặc định
+         if (!distanceKm || distanceKm <= 0) {
+            distanceKm = 10; // Mặc định 10km
+         }
+
+         // Đảm bảo weightKg là number
+         const weightKgNum = Number(weightKg);
+         if (isNaN(weightKgNum) || weightKgNum <= 0) {
+            messageApi.error("Trọng tải hàng hóa không hợp lệ");
+            setFindingDrivers(false);
+            return;
+         }
+
+         // Tính giá theo trọng lượng
+         const ton = weightKgNum / 1000;
+         let pricePerKm = 40000;
+         if (ton <= 1) pricePerKm = 40000;
+         else if (ton <= 3) pricePerKm = 60000;
+         else if (ton <= 5) pricePerKm = 80000;
+         else if (ton <= 10) pricePerKm = 100000;
+         else pricePerKm = 150000;
+
+         // Chuẩn bị dữ liệu đơn hàng
+         const orderData = {
+            pickupAddress,
+            dropoffAddress,
+            customerNote,
+            paymentMethod: "Cash",
+            paymentBy,
+            pickupLocation: {
+               type: "Point",
+               coordinates: [Number(pickupLng), Number(pickupLat)]
+            },
+            ...(dropoffLat && dropoffLng && {
+               dropoffLocation: {
+                  type: "Point",
+                  coordinates: [Number(dropoffLng), Number(dropoffLat)]
+               }
+            }),
+            items: [{
+               vehicleType: null, // Không cần vehicleType cụ thể (theo luồng mới)
+               vehicleId: null,
+               pricePerKm: pricePerKm,
+               weightKg: weightKgNum,
+               distanceKm: Number(distanceKm.toFixed(2)), // Làm tròn 2 chữ số thập phân
+               loadingService: false,
+               insurance: false,
+               itemPhotos: []
+            }]
+         };
+
+         // Tạo đơn hàng
+         const response = await orderService.createOrder(orderData);
+
+         if (response.data?.success) {
+            const orderId = response.data.data._id;
+            setCreatedOrderId(orderId);
+            messageApi.success("Đã tạo đơn hàng, đang tìm tài xế gần bạn...");
+            setFindingDrivers(false);
+            // Không navigate ngay, đợi tài xế nhận đơn
+         } else {
+            messageApi.error("Lỗi khi tạo đơn hàng: " + (response.data?.message || "Vui lòng thử lại"));
+            setFindingDrivers(false);
+         }
+      } catch (error) {
+         console.error("Lỗi khi tìm tài xế:", error);
+         messageApi.error("Lỗi khi tìm tài xế: " + (error.response?.data?.message || error.message || "Vui lòng thử lại"));
+         setFindingDrivers(false);
+      }
    };
 
    return (
       <div className="h-full overflow-auto">
-         {/* Vehicle Statistics */}
-         <VehicleStats
-            totalVehicles={stats.totalVehicles}
-            onlineDrivers={stats.onlineDrivers}
-            availableVehicles={stats.availableVehicles}
-            totalOrders={stats.totalOrders}
+         {/* Order Form - Vào thẳng form đặt hàng */}
+         <OrderForm
+            form={form}
+            onSubmit={handleFindDrivers}
+            submitting={findingDrivers}
+            totalPrice={totalPrice}
+            formatCurrency={formatCurrency}
+            onDistanceChange={handleDistanceChange}
+            buttonText={createdOrderId ? "Đang tìm tài xế..." : "Tìm tài xế"}
+            disabled={!!createdOrderId}
+            priceBreakdown={priceBreakdown}
          />
 
-         {/* Search Filters */}
-         <SearchFilters
-            searchTerm={searchTerm}
-            setSearchTerm={setSearchTerm}
-            selectedDistrict={selectedDistrict}
-            setSelectedDistrict={setSelectedDistrict}
-            selectedType={selectedType}
-            setSelectedType={setSelectedType}
-            selectedWeight={selectedWeight}
-            setSelectedWeight={setSelectedWeight}
-            filteredVehiclesCount={filteredVehicles.length}
-            orderItemsCount={0} // Không có giỏ hàng ở trang này
-            onScrollToTop={handleScrollToTop}
-         />
-
-         {/* Vehicle Grid */}
-         <VehicleGrid
-            vehicles={filteredVehicles}
-            loading={loading}
-            onViewDetails={handleOpenModal}
-            onSelectVehicle={handleSelectVehicle}
-            selectedVehicleIds={[]} // Không có xe nào được chọn
-         />
-
-         {/* Vehicle Detail Modal */}
-         <VehicleDetailModal
-            open={isModalOpen}
-            onClose={handleCloseModal}
-            vehicle={selectedVehicle}
-            loading={vehicleDetailLoading}
-         />
+         {/* Hiển thị trạng thái đang tìm tài xế */}
+         {createdOrderId && (
+            <Card className="mt-4">
+               <div className="text-center py-6">
+                  <div className="text-2xl font-semibold mb-2 text-blue-600">Đang tìm tài xế...</div>
+                  <div className="text-gray-600 mb-4">
+                     Hệ thống đang quét các tài xế gần bạn trong bán kính 2km có xe phù hợp với trọng tải yêu cầu
+                  </div>
+                  <div className="text-sm text-gray-500">
+                     Vui lòng đợi tài xế xác nhận nhận đơn
+                  </div>
+               </div>
+            </Card>
+         )}
       </div>
    )
 }

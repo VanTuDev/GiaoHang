@@ -26,4 +26,7 @@ export const driverService = {
 
   // Cập nhật thông tin ngân hàng
   updateBank: (data) => axiosClient.put(DRIVER_ENDPOINTS.updateBank, data),
+
+  // Cập nhật vị trí hiện tại
+  updateLocation: (latitude, longitude) => axiosClient.put(DRIVER_ENDPOINTS.updateLocation, { latitude, longitude }),
 };
