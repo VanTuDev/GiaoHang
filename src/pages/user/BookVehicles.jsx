@@ -6,6 +6,7 @@ import { useLocation, useNavigate } from "react-router-dom"
 import { io } from 'socket.io-client'
 
 import OrderForm from "./components/OrderForm"
+import FindingDriverModal from "./components/FindingDriverModal"
 import { orderService } from "../../features/orders/api/orderService"
 import { formatCurrency } from "../../utils/formatters"
 import useLocalUser from "../../authentication/hooks/useLocalUser"
@@ -21,8 +22,12 @@ export default function BookVehicles() {
    const [findingDrivers, setFindingDrivers] = useState(false);
    const [calculatedDistance, setCalculatedDistance] = useState(null);
    const [totalPrice, setTotalPrice] = useState(0);
+   const [driverFound, setDriverFound] = useState(false);
+   const [driverName, setDriverName] = useState(null);
+   const [showFindingModal, setShowFindingModal] = useState(false);
    const user = useLocalUser();
    const socketRef = useRef(null);
+   const timeoutRef = useRef(null); // Ref để lưu timeout 2 phút
 
    // Xử lý khi khoảng cách thay đổi từ OrderForm
    const handleDistanceChange = (distance) => {
@@ -86,30 +91,157 @@ export default function BookVehicles() {
          }
       }
 
+      // Disconnect socket cũ nếu có
+      if (socketRef.current) {
+         socketRef.current.disconnect()
+      }
+
       const socket = io(SOCKET_URL, { transports: ['websocket'], withCredentials: false })
       socketRef.current = socket
 
       socket.on('connect', () => {
          socket.emit('customer:join', user._id)
-         console.log('✅ Customer đã join room')
+         console.log('✅ Customer đã join room:', user._id)
+      })
+
+      socket.on('connect_error', (error) => {
+         console.error('❌ Socket connection error:', error)
       })
 
       // Lắng nghe khi tài xế nhận đơn
       socket.on('order:accepted', (payload) => {
          console.log('📨 Nhận được order:accepted:', payload)
-         if (payload.orderId === createdOrderId) {
-            messageApi.success(`Tài xế ${payload.driverName} đã nhận đơn của bạn!`)
-            // Chuyển sang màn hình tracking
+         console.log('📨 Created Order ID:', createdOrderId)
+         console.log('📨 Payload Order ID:', payload.orderId)
+         
+         // So sánh orderId dưới dạng string để tránh vấn đề type mismatch
+         if (String(payload.orderId) === String(createdOrderId)) {
+            console.log('✅ Order ID khớp, cập nhật popup')
+            
+            // Xóa timeout nếu có
+            if (timeoutRef.current) {
+               clearTimeout(timeoutRef.current)
+               timeoutRef.current = null
+            }
+            
+            // Cập nhật popup thành "Đã tìm thấy tài xế"
+            setDriverFound(true);
+            setDriverName(payload.driverName || 'Tài xế');
+            
+            // Sau 2 giây, chuyển sang trang đơn hàng và mở chi tiết đơn
             setTimeout(() => {
-               navigate(`/dashboard/order-tracking/${createdOrderId}`)
-            }, 1500)
+               setShowFindingModal(false);
+               navigate(`/dashboard/orders?orderId=${createdOrderId}&openDetail=true`)
+            }, 2000)
+         } else {
+            console.log('⚠️ Order ID không khớp:', {
+               payloadOrderId: payload.orderId,
+               createdOrderId: createdOrderId,
+               payloadOrderIdType: typeof payload.orderId,
+               createdOrderIdType: typeof createdOrderId
+            })
          }
       })
 
       return () => {
-         socket.disconnect()
+         if (socketRef.current) {
+            socketRef.current.disconnect()
+         }
       }
    }, [createdOrderId, user?._id, navigate])
+
+   // Polling fallback: Kiểm tra trạng thái đơn mỗi 3 giây nếu chưa có tài xế
+   useEffect(() => {
+      if (!createdOrderId || !showFindingModal || driverFound) return
+
+      const checkOrderStatus = async () => {
+         try {
+            const response = await orderService.getOrderDetail(createdOrderId)
+            if (response.data?.success) {
+               const order = response.data.data
+               // Kiểm tra xem có item nào đã được nhận chưa
+               const hasAcceptedItem = order.items?.some(item => 
+                  item.status === 'Accepted' && item.driverId
+               )
+
+               if (hasAcceptedItem) {
+                  console.log('✅ Phát hiện tài xế đã nhận đơn qua polling')
+                  const acceptedItem = order.items.find(item => 
+                     item.status === 'Accepted' && item.driverId
+                  )
+                  
+                  if (acceptedItem?.driverId?.userId) {
+                     // Xóa timeout nếu có
+                     if (timeoutRef.current) {
+                        clearTimeout(timeoutRef.current)
+                        timeoutRef.current = null
+                     }
+                     
+                     setDriverFound(true)
+                     setDriverName(acceptedItem.driverId.userId.name || 'Tài xế')
+                     
+                     setTimeout(() => {
+                        setShowFindingModal(false)
+                        navigate(`/dashboard/orders?orderId=${createdOrderId}&openDetail=true`)
+                     }, 2000)
+                  }
+               }
+            }
+         } catch (error) {
+            console.error('❌ Lỗi khi kiểm tra trạng thái đơn:', error)
+         }
+      }
+
+      // Kiểm tra ngay lập tức
+      checkOrderStatus()
+
+      // Sau đó kiểm tra mỗi 3 giây
+      const interval = setInterval(checkOrderStatus, 3000)
+
+      return () => clearInterval(interval)
+   }, [createdOrderId, showFindingModal, driverFound, navigate])
+
+   // Timeout 2 phút: Tự động đóng popup nếu chưa có tài xế
+   useEffect(() => {
+      if (!showFindingModal || !createdOrderId || driverFound) {
+         // Xóa timeout nếu popup đóng hoặc đã tìm thấy tài xế
+         if (timeoutRef.current) {
+            clearTimeout(timeoutRef.current)
+            timeoutRef.current = null
+         }
+         return
+      }
+
+      // Bắt đầu đếm ngược 2 phút (120 giây)
+      console.log('⏰ [BookVehicles] Bắt đầu đếm ngược 2 phút cho popup tìm tài xế')
+      
+      timeoutRef.current = setTimeout(() => {
+         console.log('⏰ [BookVehicles] Đã hết 2 phút, tự động đóng popup')
+         
+         // Đóng popup
+         setShowFindingModal(false)
+         
+         // Reset state để user có thể bấm lại nút "Tìm tài xế"
+         setCreatedOrderId(null)
+         setDriverFound(false)
+         setDriverName(null)
+         
+         // Thông báo cho user
+         messageApi.warning({
+            content: 'Đã hết thời gian tìm tài xế (2 phút). Vui lòng bấm lại nút "Tìm tài xế" để tiếp tục.',
+            duration: 5
+         })
+         
+         timeoutRef.current = null
+      }, 120000) // 2 phút = 120,000ms
+
+      return () => {
+         if (timeoutRef.current) {
+            clearTimeout(timeoutRef.current)
+            timeoutRef.current = null
+         }
+      }
+   }, [showFindingModal, createdOrderId, driverFound, messageApi])
 
    // Xử lý tìm tài xế (thay vì submit trực tiếp)
    const handleFindDrivers = async (values) => {
@@ -215,17 +347,21 @@ export default function BookVehicles() {
          if (response.data?.success) {
             const orderId = response.data.data._id;
             setCreatedOrderId(orderId);
-            messageApi.success("Đã tạo đơn hàng, đang tìm tài xế gần bạn...");
+            setDriverFound(false);
+            setDriverName(null);
             setFindingDrivers(false);
-            // Không navigate ngay, đợi tài xế nhận đơn
+            setShowFindingModal(true); // Hiển thị popup ngay lập tức
+            console.log('✅ Đơn hàng đã được tạo, hiển thị popup tìm tài xế:', orderId);
          } else {
             messageApi.error("Lỗi khi tạo đơn hàng: " + (response.data?.message || "Vui lòng thử lại"));
             setFindingDrivers(false);
+            setShowFindingModal(false);
          }
       } catch (error) {
          console.error("Lỗi khi tìm tài xế:", error);
          messageApi.error("Lỗi khi tìm tài xế: " + (error.response?.data?.message || error.message || "Vui lòng thử lại"));
          setFindingDrivers(false);
+         setShowFindingModal(false);
       }
    };
 
@@ -244,20 +380,13 @@ export default function BookVehicles() {
             priceBreakdown={priceBreakdown}
          />
 
-         {/* Hiển thị trạng thái đang tìm tài xế */}
-         {createdOrderId && (
-            <Card className="mt-4">
-               <div className="text-center py-6">
-                  <div className="text-2xl font-semibold mb-2 text-blue-600">Đang tìm tài xế...</div>
-                  <div className="text-gray-600 mb-4">
-                     Hệ thống đang quét các tài xế gần bạn trong bán kính 2km có xe phù hợp với trọng tải yêu cầu
-                  </div>
-                  <div className="text-sm text-gray-500">
-                     Vui lòng đợi tài xế xác nhận nhận đơn
-                  </div>
-               </div>
-            </Card>
-         )}
+         {/* Popup tìm tài xế */}
+         <FindingDriverModal
+            visible={showFindingModal && !!createdOrderId}
+            orderId={createdOrderId}
+            driverFound={driverFound}
+            driverName={driverName}
+         />
       </div>
    )
 }

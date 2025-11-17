@@ -31,6 +31,11 @@ const Feedback = () => {
       }
    };
 
+   const handleDeleteSuccess = () => {
+      // Refresh danh sách sau khi xóa
+      fetchFeedbacks();
+   };
+
    useEffect(() => {
       fetchFeedbacks();
    }, [filters]);
@@ -119,6 +124,7 @@ const Feedback = () => {
                   feedbacks={feedbacks}
                   showStats={false}
                   loading={loading}
+                  onDelete={handleDeleteSuccess}
                />
             )}
          </Card>

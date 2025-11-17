@@ -1,20 +1,39 @@
 import React from "react";
-import { Card, Rate, Avatar, Tag, Image, Row, Col, Statistic, Empty } from "antd";
+import { Card, Rate, Avatar, Tag, Image, Row, Col, Statistic, Empty, Button, Popconfirm, message } from "antd";
 import {
    StarFilled,
    UserOutlined,
    CalendarOutlined,
    LikeOutlined,
-   MessageOutlined
+   MessageOutlined,
+   DeleteOutlined
 } from "@ant-design/icons";
 import { formatDate } from "../../../utils/formatters";
+import { feedbackService } from "../../../features/feedback/api/feedbackService";
 
 const FeedbackDisplay = ({
    feedbacks = [],
    stats = null,
    showStats = true,
-   loading = false
+   loading = false,
+   onDelete = null // Callback khi xóa thành công
 }) => {
+   const handleDelete = async (feedbackId) => {
+      try {
+         const response = await feedbackService.deleteFeedback(feedbackId);
+         if (response.data?.success) {
+            message.success("Xóa đánh giá thành công!");
+            // Gọi callback để refresh danh sách
+            if (onDelete) {
+               onDelete();
+            }
+         } else {
+            message.error(response.data?.message || "Có lỗi xảy ra");
+         }
+      } catch (error) {
+         message.error(error.response?.data?.message || "Có lỗi xảy ra khi xóa đánh giá");
+      }
+   };
    const getStatusColor = (status) => {
       const colors = {
          'Pending': 'orange',
@@ -148,9 +167,32 @@ const FeedbackDisplay = ({
                                  {getStatusText(feedback.status)}
                               </Tag>
                            </div>
-                           <div className="flex items-center text-sm text-gray-500">
-                              <CalendarOutlined className="mr-1" />
-                              {formatDate(feedback.createdAt)}
+                           <div className="flex items-center gap-2">
+                              <div className="flex items-center text-sm text-gray-500">
+                                 <CalendarOutlined className="mr-1" />
+                                 {formatDate(feedback.createdAt)}
+                              </div>
+                              {/* Nút xóa - chỉ hiển thị cho customer của feedback này */}
+                              {onDelete && (
+                                 <Popconfirm
+                                    title="Xóa đánh giá"
+                                    description="Bạn có chắc chắn muốn xóa đánh giá này? Rating của tài xế sẽ được cập nhật lại."
+                                    onConfirm={() => handleDelete(feedback._id)}
+                                    okText="Xóa"
+                                    cancelText="Hủy"
+                                    okButtonProps={{ danger: true }}
+                                 >
+                                    <Button
+                                       type="text"
+                                       danger
+                                       icon={<DeleteOutlined />}
+                                       size="small"
+                                       className="text-red-500 hover:text-red-700"
+                                    >
+                                       Xóa
+                                    </Button>
+                                 </Popconfirm>
+                              )}
                            </div>
                         </div>
 

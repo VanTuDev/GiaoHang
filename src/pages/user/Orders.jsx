@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Spin, Alert, message, Modal } from "antd";
 import { ExclamationCircleOutlined } from "@ant-design/icons";
+import { useLocation, useNavigate } from "react-router-dom";
 import { orderService } from "../../features/orders/api/orderService";
 import { feedbackService } from "../../features/feedback/api/feedbackService";
 import FeedbackModal from "./components/FeedbackModal";
@@ -12,6 +13,8 @@ import OrderFilters from './components/OrderFilters';
 import OrderEmpty from './components/OrderEmpty';
 
 export default function OrdersPage() {
+   const location = useLocation();
+   const navigate = useNavigate();
    const [searchTerm, setSearchTerm] = useState("");
    const [statusFilter, setStatusFilter] = useState("all");
    const [loading, setLoading] = useState(false);
@@ -87,6 +90,77 @@ export default function OrdersPage() {
       fetchOrders();
    }, [statusFilter]);
 
+   // Load feedback của đơn hàng
+   const loadOrderFeedbacks = async (orderId) => {
+      setFeedbackLoading(true);
+      try {
+         const response = await feedbackService.getOrderFeedbacks(orderId);
+         if (response.data?.success) {
+            setFeedbacks(response.data.data);
+            setFeedbackStats(response.data.stats);
+         }
+      } catch (error) {
+         console.error("Lỗi khi tải feedback:", error);
+      } finally {
+         setFeedbackLoading(false);
+      }
+   };
+
+   // Tự động mở chi tiết đơn khi có query param từ OrderCreate
+   useEffect(() => {
+      const queryParams = new URLSearchParams(location.search);
+      const orderId = queryParams.get('orderId');
+      const openDetail = queryParams.get('openDetail') === 'true';
+
+      if (orderId && openDetail) {
+         // Đợi một chút để đảm bảo đơn đã được cập nhật trong database
+         const timer = setTimeout(async () => {
+            try {
+               setLoading(true);
+               const response = await orderService.getOrderDetail(orderId);
+
+               if (response.data?.success) {
+                  const orderData = response.data.data;
+                  setSelectedOrder(orderData);
+                  setDetailModalVisible(true);
+                  await loadOrderFeedbacks(orderId);
+                  
+                  // Refresh danh sách đơn để đảm bảo đơn mới được hiển thị
+                  const refreshResponse = await orderService.getMyOrders({});
+                  if (refreshResponse.data?.success) {
+                     let allOrders = refreshResponse.data.data || [];
+                     const filteredOrders = allOrders.filter(order => {
+                        const orderStatus = order.status;
+                        if (order.items && order.items.length > 0) {
+                           const hasActiveItems = order.items.some(item => 
+                              item.status && item.status !== 'Created'
+                           );
+                           if (orderStatus === 'InProgress' || orderStatus === 'Completed') {
+                              return true;
+                           }
+                           return hasActiveItems;
+                        }
+                        return orderStatus === 'InProgress' || orderStatus === 'Completed';
+                     });
+                     setOrders(filteredOrders);
+                  }
+               } else {
+                  message.error("Không thể tải chi tiết đơn hàng");
+               }
+            } catch (error) {
+               console.error("Lỗi khi tải chi tiết đơn hàng:", error);
+               message.error("Lỗi khi tải chi tiết đơn hàng");
+            } finally {
+               setLoading(false);
+               // Xóa query params sau khi đã mở modal
+               navigate(location.pathname, { replace: true });
+            }
+         }, 500);
+
+         return () => clearTimeout(timer);
+      }
+   }, [location.search, navigate]);
+
    // Xem chi tiết đơn hàng
    const handleViewDetail = async (orderId, driverInfo = null) => {
       try {
@@ -125,22 +199,6 @@ export default function OrdersPage() {
          message.error("Lỗi khi tải chi tiết đơn hàng");
       } finally {
          setLoading(false);
-      }
-   };
-
-   // Load feedback của đơn hàng
-   const loadOrderFeedbacks = async (orderId) => {
-      setFeedbackLoading(true);
-      try {
-         const response = await feedbackService.getOrderFeedbacks(orderId);
-         if (response.data?.success) {
-            setFeedbacks(response.data.data);
-            setFeedbackStats(response.data.stats);
-         }
-      } catch (error) {
-         console.error("Lỗi khi tải feedback:", error);
-      } finally {
-         setFeedbackLoading(false);
       }
    };
 

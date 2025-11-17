@@ -54,4 +54,7 @@ export const profileService = {
          throw error;
       }
    },
+
+   // Đổi mật khẩu
+   changePassword: (payload) => axiosClient.put(PROFILE_ENDPOINTS.changePassword, payload),
 };

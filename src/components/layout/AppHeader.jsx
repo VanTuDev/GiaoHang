@@ -4,6 +4,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import useLocalUser from "../../authentication/hooks/useLocalUser";
 import UserDropdown from "../dropdown/UserDropdown";
 import UserInfoModal from "../modal/UserInfoModal";
+import ChangePasswordModal from "../modal/ChangePasswordModal";
 
 const { Header } = Layout;
 
@@ -12,6 +13,7 @@ export default function AppHeader() {
    const navigate = useNavigate();
    const user = useLocalUser();
    const [infoOpen, setInfoOpen] = React.useState(false);
+   const [changePasswordOpen, setChangePasswordOpen] = React.useState(false);
 
    const selected = location.pathname.startsWith("/dashboard/users")
       ? ["users"]
@@ -41,9 +43,11 @@ export default function AppHeader() {
                user={user}
                onInfo={() => setInfoOpen(true)}
                onSettings={() => navigate("/dashboard/profile")}
+               onChangePassword={() => setChangePasswordOpen(true)}
                onLogout={handleLogout}
             />
             <UserInfoModal open={infoOpen} onClose={() => setInfoOpen(false)} user={user} />
+            <ChangePasswordModal open={changePasswordOpen} onClose={() => setChangePasswordOpen(false)} />
          </div>
       </Header>
    );

@@ -15,6 +15,7 @@ import {
    CarOutlined,
    DollarOutlined,
 } from "@ant-design/icons";
+import DriverOrderPopupManager from "../components/driver/DriverOrderPopupManager";
 
 const { Header, Sider, Content, Footer } = Layout;
 
@@ -116,6 +117,9 @@ export default function DriverDashboardLayout() {
                style={{ zIndex: 100 }}
             />
          ) : null}
+         
+         {/* Popup quản lý đơn hàng mới - hiển thị ở mọi trang */}
+         <DriverOrderPopupManager />
       </Layout>
    );
 }

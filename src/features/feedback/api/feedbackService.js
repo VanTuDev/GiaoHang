@@ -19,4 +19,7 @@ export const feedbackService = {
 
    // Admin: Cập nhật trạng thái đánh giá
    updateFeedbackStatus: (feedbackId, payload) => axiosClient.put(FEEDBACK_ENDPOINTS.adminUpdateStatus(feedbackId), payload),
+
+   // Customer: Xóa đánh giá của mình
+   deleteFeedback: (feedbackId) => axiosClient.delete(FEEDBACK_ENDPOINTS.deleteFeedback(feedbackId)),
 };

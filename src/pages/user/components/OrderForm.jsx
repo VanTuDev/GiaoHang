@@ -1,6 +1,6 @@
 import React, { useMemo, useRef, useState, useEffect, useCallback } from "react";
-import { EnvironmentOutlined, AimOutlined, SearchOutlined, DollarOutlined, LoadingOutlined } from "@ant-design/icons";
-import { Form, Input, InputNumber, Button, Card, Row, Col, Segmented, Space, Radio, message, Spin } from "antd";
+import { EnvironmentOutlined, AimOutlined, SearchOutlined, DollarOutlined, LoadingOutlined, SafetyCertificateOutlined, ToolOutlined } from "@ant-design/icons";
+import { Form, Input, InputNumber, Button, Card, Row, Col, Segmented, Space, Radio, message, Spin, Checkbox } from "antd";
 // OpenStreetMap via react-leaflet
 import { MapContainer, TileLayer, Marker, useMapEvents } from "react-leaflet";
 import "leaflet/dist/leaflet.css";
@@ -225,7 +225,9 @@ const OrderForm = ({
                pickupAddress: "",
                dropoffAddress: "",
                customerNote: "",
-               paymentBy: "sender" // Mặc định: người đặt trả tiền
+               paymentBy: "sender", // Mặc định: người đặt trả tiền
+               loadingService: false,
+               insurance: false
             }}
          >
             {/* Khu vực địa điểm + Map */}
@@ -368,6 +370,50 @@ const OrderForm = ({
                   addonAfter="kg"
                />
             </Form.Item>
+
+            {/* Service Selection */}
+            <Card 
+               size="small" 
+               className="mb-4"
+               title={
+                  <span className="text-sm font-semibold">
+                     <ToolOutlined className="mr-2" />
+                     Dịch vụ bổ sung
+                  </span>
+               }
+               style={{ backgroundColor: '#fafafa' }}
+            >
+               <Form.Item
+                  name="loadingService"
+                  valuePropName="checked"
+               >
+                  <Checkbox>
+                     <div>
+                        <div className="font-medium">Dịch vụ bốc xếp hàng hóa (+50,000đ)</div>
+                        <div className="text-xs text-gray-500 mt-1">
+                           Tài xế sẽ hỗ trợ bốc xếp hàng hóa tại điểm lấy và giao
+                        </div>
+                     </div>
+                  </Checkbox>
+               </Form.Item>
+
+               <Form.Item
+                  name="insurance"
+                  valuePropName="checked"
+               >
+                  <Checkbox>
+                     <div>
+                        <div className="font-medium flex items-center">
+                           <SafetyCertificateOutlined className="mr-1 text-green-600" />
+                           Bảo hiểm hàng hóa (+100,000đ)
+                        </div>
+                        <div className="text-xs text-gray-500 mt-1">
+                           Bảo hiểm toàn bộ hàng hóa trong quá trình vận chuyển
+                        </div>
+                     </div>
+                  </Checkbox>
+               </Form.Item>
+            </Card>
 
             {/* Payment By - Người trả tiền */}
             <Form.Item

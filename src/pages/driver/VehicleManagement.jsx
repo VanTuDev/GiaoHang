@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
    Card,
    Button,
@@ -19,7 +19,8 @@ import {
    Badge,
    Space,
    Tag,
-   Divider
+   Divider,
+   Radio
 } from 'antd';
 import {
    PlusOutlined,
@@ -36,8 +37,14 @@ import {
    TrophyOutlined,
    RocketOutlined,
    AimOutlined,
-   ReloadOutlined
+   ReloadOutlined,
+   GlobalOutlined,
+   CompassOutlined
 } from '@ant-design/icons';
+// OpenStreetMap via react-leaflet
+import { MapContainer, TileLayer, Marker, useMapEvents } from "react-leaflet";
+import "leaflet/dist/leaflet.css";
+import L from "leaflet";
 import { vehicleService } from '../../features/vehicles/api/vehicleService';
 import { driverService } from '../../features/driver/api/driverService';
 import { orderService } from '../../features/orders/api/orderService';
@@ -60,14 +67,62 @@ export default function VehicleManagement() {
    const [updatingStatus, setUpdatingStatus] = useState(false);
    const [driverInfo, setDriverInfo] = useState(null);
    const [currentLocation, setCurrentLocation] = useState(null);
+   const [locationAddress, setLocationAddress] = useState(null);
    const [locationUpdatedAt, setLocationUpdatedAt] = useState(null);
    const [updatingLocation, setUpdatingLocation] = useState(false);
+   const [locationMode, setLocationMode] = useState('auto'); // 'auto' | 'manual'
+   const [manualLocation, setManualLocation] = useState(null); // { lat, lng } khi ở manual mode
+   const [mapKey, setMapKey] = useState(0); // Force re-render map
    const [stats, setStats] = useState({
       totalTrips: 0,
       rating: 5.0,
       balance: 0,
       activeOrders: 0
    });
+
+   // Icon marker cho bản đồ
+   const markerIcon = useMemo(() => new L.Icon({
+      iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+      iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+      shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+      iconSize: [25, 41],
+      iconAnchor: [12, 41],
+      popupAnchor: [1, -34],
+      shadowSize: [41, 41]
+   }), []);
+
+   const defaultCenter = useMemo(() => ({ lat: 16.047079, lng: 108.206230 }), []); // Đà Nẵng
+
+   // Hàm reverse geocoding để lấy địa chỉ từ tọa độ
+   const reverseGeocode = async (lat, lng) => {
+      try {
+         const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&addressdetails=1&zoom=18&accept-language=vi`;
+         const resp = await fetch(url, { 
+            headers: { 
+               "Accept": "application/json",
+               "User-Agent": "GiaoHangApp/1.0"
+            } 
+         });
+         const data = await resp.json();
+         return data?.display_name || "";
+      } catch (error) {
+         console.error("Lỗi khi reverse geocode:", error);
+         return "";
+      }
+   };
+
+   // Load location mode preference từ localStorage
+   useEffect(() => {
+      const savedMode = localStorage.getItem('driver_location_mode');
+      if (savedMode === 'auto' || savedMode === 'manual') {
+         setLocationMode(savedMode);
+      }
+   }, []);
+
+   // Lưu location mode preference vào localStorage
+   useEffect(() => {
+      localStorage.setItem('driver_location_mode', locationMode);
+   }, [locationMode]);
 
    // Tải dữ liệu ban đầu
    useEffect(() => {
@@ -100,6 +155,12 @@ export default function VehicleManagement() {
                if (driverData.currentLocation && driverData.currentLocation.coordinates) {
                   const [lng, lat] = driverData.currentLocation.coordinates;
                   setCurrentLocation({ latitude: lat, longitude: lng });
+                  setManualLocation({ lat, lng }); // Set manual location để hiển thị trên map
+                  // Lấy địa chỉ từ tọa độ hiện có
+                  const address = await reverseGeocode(lat, lng);
+                  if (address) {
+                     setLocationAddress(address);
+                  }
                }
                if (driverData.locationUpdatedAt) {
                   setLocationUpdatedAt(new Date(driverData.locationUpdatedAt));
@@ -263,6 +324,17 @@ export default function VehicleManagement() {
                         await driverService.updateLocation(latitude, longitude);
                         console.log('📍 Đã cập nhật vị trí:', { latitude, longitude });
                         
+                        // Lấy địa chỉ từ tọa độ
+                        const address = await reverseGeocode(latitude, longitude);
+                        if (address) {
+                           setLocationAddress(address);
+                        }
+                        
+                        // Cập nhật manual location nếu ở manual mode
+                        if (locationMode === 'manual') {
+                           setManualLocation({ lat: latitude, lng: longitude });
+                        }
+                        
                         // Sau đó mới bật online
                         const response = await orderService.setDriverOnline(checked);
                         
@@ -273,30 +345,41 @@ export default function VehicleManagement() {
                            setLocationUpdatedAt(new Date());
                            message.success('Đã bật trạng thái hoạt động và cập nhật vị trí');
                            
-                           // Tự động cập nhật vị trí định kỳ khi online (mỗi 30 giây)
-                           if (window.locationUpdateInterval) {
-                              clearInterval(window.locationUpdateInterval);
-                           }
-                           window.locationUpdateInterval = setInterval(async () => {
-                              if (navigator.geolocation) {
-                                 navigator.geolocation.getCurrentPosition(
-                                    async (pos) => {
-                                       try {
-                                          await driverService.updateLocation(pos.coords.latitude, pos.coords.longitude);
-                                          // Cập nhật state
-                                          setCurrentLocation({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
-                                          setLocationUpdatedAt(new Date());
-                                          console.log('📍 Đã cập nhật vị trí định kỳ');
-                                       } catch (err) {
-                                          console.error('Lỗi cập nhật vị trí định kỳ:', err);
-                                       }
-                                    },
-                                    (err) => {
-                                       console.error('Lỗi lấy vị trí định kỳ:', err);
-                                    }
-                                 );
+                           // Tự động cập nhật vị trí định kỳ khi online (chỉ khi ở auto mode)
+                           if (locationMode === 'auto') {
+                              if (window.locationUpdateInterval) {
+                                 clearInterval(window.locationUpdateInterval);
                               }
-                           }, 30000); // 30 giây
+                              window.locationUpdateInterval = setInterval(async () => {
+                                 // Kiểm tra locationMode từ localStorage (tránh closure issue)
+                                 const currentMode = localStorage.getItem('driver_location_mode') || 'auto';
+                                 if (currentMode === 'auto' && navigator.geolocation) {
+                                    navigator.geolocation.getCurrentPosition(
+                                       async (pos) => {
+                                          try {
+                                             await driverService.updateLocation(pos.coords.latitude, pos.coords.longitude);
+                                             // Cập nhật state
+                                             setCurrentLocation({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
+                                             setLocationUpdatedAt(new Date());
+                                             // Cập nhật địa chỉ định kỳ (mỗi 5 lần để tránh quá tải)
+                                             if (Math.random() < 0.2) { // 20% khả năng
+                                                const address = await reverseGeocode(pos.coords.latitude, pos.coords.longitude);
+                                                if (address) {
+                                                   setLocationAddress(address);
+                                                }
+                                             }
+                                             console.log('📍 Đã cập nhật vị trí định kỳ');
+                                          } catch (err) {
+                                             console.error('Lỗi cập nhật vị trí định kỳ:', err);
+                                          }
+                                       },
+                                       (err) => {
+                                          console.error('Lỗi lấy vị trí định kỳ:', err);
+                                       }
+                                    );
+                                 }
+                              }, 30000); // 30 giây
+                           }
                         } else {
                            message.error('Không thể cập nhật trạng thái hoạt động');
                         }
@@ -384,8 +467,54 @@ export default function VehicleManagement() {
       }
    };
 
-   // Xử lý cập nhật vị trí hiện tại
+   // Hàm chung để cập nhật vị trí lên server
+   const updateLocationToServer = async (latitude, longitude) => {
+      try {
+         const response = await driverService.updateLocation(latitude, longitude);
+         
+         if (response.data?.success) {
+            setCurrentLocation({ latitude, longitude });
+            setLocationUpdatedAt(new Date());
+            setManualLocation({ lat: latitude, lng: longitude });
+            
+            // Lấy địa chỉ từ tọa độ
+            const address = await reverseGeocode(latitude, longitude);
+            if (address) {
+               setLocationAddress(address);
+            }
+            
+            // Cập nhật driverInfo
+            if (driverInfo) {
+               setDriverInfo({
+                  ...driverInfo,
+                  currentLocation: {
+                     type: 'Point',
+                     coordinates: [longitude, latitude]
+                  },
+                  locationUpdatedAt: new Date()
+               });
+            }
+            
+            return true;
+         } else {
+            message.error('Không thể cập nhật vị trí');
+            return false;
+         }
+      } catch (error) {
+         console.error("Lỗi khi cập nhật vị trí:", error);
+         message.error("Lỗi khi cập nhật vị trí: " + (error.response?.data?.message || error.message));
+         return false;
+      }
+   };
+
+   // Xử lý cập nhật vị trí hiện tại (Auto mode - dùng GPS)
    const handleUpdateLocation = async () => {
+      if (locationMode === 'manual') {
+         // Nếu ở manual mode, yêu cầu chọn trên map
+         message.info('Vui lòng chọn vị trí trên bản đồ');
+         return;
+      }
+
       if (!navigator.geolocation) {
          message.error('Trình duyệt không hỗ trợ lấy vị trí');
          return;
@@ -396,35 +525,11 @@ export default function VehicleManagement() {
       navigator.geolocation.getCurrentPosition(
          async (position) => {
             const { latitude, longitude } = position.coords;
-            
-            try {
-               const response = await driverService.updateLocation(latitude, longitude);
-               
-               if (response.data?.success) {
-                  setCurrentLocation({ latitude, longitude });
-                  setLocationUpdatedAt(new Date());
-                  message.success('Cập nhật vị trí thành công');
-                  
-                  // Cập nhật driverInfo
-                  if (driverInfo) {
-                     setDriverInfo({
-                        ...driverInfo,
-                        currentLocation: {
-                           type: 'Point',
-                           coordinates: [longitude, latitude]
-                        },
-                        locationUpdatedAt: new Date()
-                     });
-                  }
-               } else {
-                  message.error('Không thể cập nhật vị trí');
-               }
-            } catch (error) {
-               console.error("Lỗi khi cập nhật vị trí:", error);
-               message.error("Lỗi khi cập nhật vị trí: " + (error.response?.data?.message || error.message));
-            } finally {
-               setUpdatingLocation(false);
+            const success = await updateLocationToServer(latitude, longitude);
+            if (success) {
+               message.success('Cập nhật vị trí thành công');
             }
+            setUpdatingLocation(false);
          },
          (error) => {
             console.error("Lỗi lấy vị trí:", error);
@@ -449,6 +554,30 @@ export default function VehicleManagement() {
             maximumAge: 0
          }
       );
+   };
+
+   // Xử lý khi chọn vị trí trên bản đồ (Manual mode)
+   const handleManualLocationSelect = async (lat, lng) => {
+      setManualLocation({ lat, lng });
+      setUpdatingLocation(true);
+      const success = await updateLocationToServer(lat, lng);
+      if (success) {
+         message.success('Đã cập nhật vị trí từ bản đồ');
+      }
+      setUpdatingLocation(false);
+   };
+
+   // Component MapClick để xử lý click trên map
+   const MapClickHandler = () => {
+      useMapEvents({
+         async click(e) {
+            if (locationMode === 'manual') {
+               const { lat, lng } = e.latlng;
+               await handleManualLocationSelect(lat, lng);
+            }
+         }
+      });
+      return null;
    };
 
    // Kiểm tra xem có xe nào đang hoạt động không
@@ -701,63 +830,170 @@ export default function VehicleManagement() {
                <Card
                   className="mb-4 shadow-sm"
                   title={
-                     <span className="text-lg font-semibold flex items-center">
-                        <AimOutlined className="mr-2 text-blue-500" />
-                        Vị trí hiện tại
+                     <span className="text-lg font-semibold flex items-center justify-between">
+                        <span className="flex items-center">
+                           <AimOutlined className="mr-2 text-blue-500" />
+                           Vị trí hiện tại
+                        </span>
                      </span>
+                  }
+                  extra={
+                     <Radio.Group
+                        value={locationMode}
+                        onChange={(e) => {
+                           const newMode = e.target.value;
+                           setLocationMode(newMode);
+                           setMapKey(prev => prev + 1); // Force re-render map
+                           
+                           // Dừng auto-update interval nếu chuyển sang manual mode
+                           if (newMode === 'manual' && window.locationUpdateInterval) {
+                              clearInterval(window.locationUpdateInterval);
+                              window.locationUpdateInterval = null;
+                           }
+                           // Bắt đầu auto-update nếu chuyển sang auto mode và đang online
+                           else if (newMode === 'auto' && isOnline && !window.locationUpdateInterval) {
+                              // Sẽ được start khi toggle online
+                           }
+                        }}
+                        size="small"
+                        buttonStyle="solid"
+                     >
+                        <Radio.Button value="auto">
+                           <CompassOutlined className="mr-1" />
+                           Tự động (GPS)
+                        </Radio.Button>
+                        <Radio.Button value="manual">
+                           <GlobalOutlined className="mr-1" />
+                           Thủ công (Bản đồ)
+                        </Radio.Button>
+                     </Radio.Group>
                   }
                >
                   <div className="space-y-4">
+                     {/* Manual Mode - Hiển thị bản đồ */}
+                     {locationMode === 'manual' && (
+                        <div className="mb-4">
+                           <Alert
+                              message="Chế độ chọn vị trí trên bản đồ"
+                              description="Click vào bản đồ để chọn vị trí của bạn. Hệ thống sẽ sử dụng vị trí này để tìm đơn hàng gần đó."
+                              type="info"
+                              showIcon
+                              className="mb-3"
+                           />
+                           <div style={{ height: 400, borderRadius: 8, overflow: "hidden", border: "2px solid #1890ff" }}>
+                              <MapContainer
+                                 key={mapKey}
+                                 center={manualLocation || currentLocation ? 
+                                    { lat: manualLocation?.lat || currentLocation?.latitude, lng: manualLocation?.lng || currentLocation?.longitude } 
+                                    : defaultCenter
+                                 }
+                                 zoom={13}
+                                 scrollWheelZoom
+                                 style={{ height: "100%", width: "100%" }}
+                              >
+                                 <TileLayer
+                                    attribution='&copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors'
+                                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                                 />
+                                 {manualLocation && (
+                                    <Marker position={[manualLocation.lat, manualLocation.lng]} icon={markerIcon} />
+                                 )}
+                                 {!manualLocation && currentLocation && (
+                                    <Marker 
+                                       position={[currentLocation.latitude, currentLocation.longitude]} 
+                                       icon={markerIcon} 
+                                    />
+                                 )}
+                                 <MapClickHandler />
+                              </MapContainer>
+                           </div>
+                           <div className="text-xs text-gray-500 text-center mt-2">
+                              💡 Click vào bản đồ để chọn vị trí của bạn
+                           </div>
+                        </div>
+                     )}
+
+                     {/* Hiển thị thông tin vị trí */}
                      {currentLocation ? (
                         <>
-                           <div className="bg-blue-50 p-4 rounded-lg">
-                              <div className="flex items-center justify-between mb-2">
+                           <div className="bg-blue-50 p-4 rounded-lg space-y-3">
+                              <div className="flex items-center justify-between">
                                  <span className="text-sm font-medium text-gray-600">Tọa độ:</span>
                                  <Tag color="blue">
                                     {currentLocation.latitude.toFixed(6)}, {currentLocation.longitude.toFixed(6)}
                                  </Tag>
                               </div>
+                              {locationAddress && (
+                                 <div className="border-t pt-3">
+                                    <div className="flex items-start gap-2">
+                                       <EnvironmentOutlined className="text-green-600 mt-0.5" />
+                                       <div className="flex-1">
+                                          <div className="text-xs font-medium text-gray-500 mb-1">Địa chỉ:</div>
+                                          <div className="text-sm text-gray-700">{locationAddress}</div>
+                                       </div>
+                                    </div>
+                                 </div>
+                              )}
                               {locationUpdatedAt && (
-                                 <div className="text-xs text-gray-500 mt-2">
+                                 <div className="text-xs text-gray-500 border-t pt-2">
                                     Cập nhật lần cuối: {new Date(locationUpdatedAt).toLocaleString('vi-VN')}
                                  </div>
                               )}
                            </div>
-                           <Button
-                              type="primary"
-                              icon={<ReloadOutlined />}
-                              onClick={handleUpdateLocation}
-                              loading={updatingLocation}
-                              block
-                              className="bg-blue-600"
-                           >
-                              Cập nhật vị trí
-                           </Button>
+                           {locationMode === 'auto' && (
+                              <Button
+                                 type="primary"
+                                 icon={<ReloadOutlined />}
+                                 onClick={handleUpdateLocation}
+                                 loading={updatingLocation}
+                                 block
+                                 className="bg-blue-600"
+                              >
+                                 Cập nhật vị trí từ GPS
+                              </Button>
+                           )}
                         </>
                      ) : (
                         <>
-                           <Alert
-                              message="Chưa có vị trí"
-                              description="Vị trí của bạn sẽ được tự động cập nhật khi bật online. Bạn cũng có thể cập nhật thủ công."
-                              type="info"
-                              showIcon
-                              className="mb-4"
-                           />
-                           <Button
-                              type="primary"
-                              icon={<AimOutlined />}
-                              onClick={handleUpdateLocation}
-                              loading={updatingLocation}
-                              block
-                              className="bg-blue-600"
-                           >
-                              Lấy vị trí hiện tại
-                           </Button>
+                           {locationMode === 'auto' && (
+                              <>
+                                 <Alert
+                                    message="Chưa có vị trí"
+                                    description="Vị trí của bạn sẽ được tự động cập nhật khi bật online. Bạn cũng có thể cập nhật thủ công."
+                                    type="info"
+                                    showIcon
+                                    className="mb-4"
+                                 />
+                                 <Button
+                                    type="primary"
+                                    icon={<AimOutlined />}
+                                    onClick={handleUpdateLocation}
+                                    loading={updatingLocation}
+                                    block
+                                    className="bg-blue-600"
+                                 >
+                                    Lấy vị trí hiện tại từ GPS
+                                 </Button>
+                              </>
+                           )}
+                           {locationMode === 'manual' && !currentLocation && (
+                              <Alert
+                                 message="Chưa chọn vị trí"
+                                 description="Vui lòng click vào bản đồ phía trên để chọn vị trí của bạn."
+                                 type="warning"
+                                 showIcon
+                              />
+                           )}
                         </>
                      )}
                      
                      <div className="text-xs text-gray-500 text-center pt-2 border-t">
-                        💡 Vị trí của bạn giúp hệ thống tìm đơn hàng gần nhất
+                        💡 Vị trí của bạn giúp hệ thống tìm đơn hàng gần nhất (bán kính 2km)
+                        {locationMode === 'manual' && (
+                           <span className="block mt-1 text-orange-600">
+                              ⚠️ Chế độ thủ công: Hãy đảm bảo vị trí chính xác để nhận đơn hàng phù hợp
+                           </span>
+                        )}
                      </div>
                   </div>
                </Card>

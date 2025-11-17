@@ -11,6 +11,7 @@ import VehicleGrid from "./components/VehicleGrid"
 import OrderSummary from "./components/OrderSummary"
 import OrderForm from "./components/OrderForm"
 import VehicleTypeSelector from "./components/VehicleTypeSelector"
+import FindingDriverModal from "./components/FindingDriverModal"
 import { Card } from "antd"
 import { vehicleService } from "../../features/vehicles/api/vehicleService"
 import { orderService } from "../../features/orders/api/orderService"
@@ -42,6 +43,9 @@ export default function OrderCreate() {
    const [imageUploading, setImageUploading] = useState(false);
    const [createdOrderId, setCreatedOrderId] = useState(null);
    const [findingDrivers, setFindingDrivers] = useState(false);
+   const [driverFound, setDriverFound] = useState(false);
+   const [driverName, setDriverName] = useState(null);
+   const [showFindingModal, setShowFindingModal] = useState(false);
    const user = useLocalUser();
    const socketRef = useRef(null);
 
@@ -246,28 +250,43 @@ export default function OrderCreate() {
          }
       }
 
+      // Disconnect socket cũ nếu có
+      if (socketRef.current) {
+         socketRef.current.disconnect()
+      }
+
       const socket = io(SOCKET_URL, { transports: ['websocket'], withCredentials: false })
       socketRef.current = socket
 
       socket.on('connect', () => {
          socket.emit('customer:join', user._id)
-         console.log('✅ Customer đã join room')
+         console.log('✅ Customer đã join room:', user._id)
+      })
+
+      socket.on('connect_error', (error) => {
+         console.error('❌ Socket connection error:', error)
       })
 
       // Lắng nghe khi tài xế nhận đơn
       socket.on('order:accepted', (payload) => {
          console.log('📨 Nhận được order:accepted:', payload)
          if (payload.orderId === createdOrderId) {
-            message.success(`Tài xế ${payload.driverName} đã nhận đơn của bạn!`)
-            // Chuyển sang màn hình tracking
+            // Cập nhật popup thành "Đã tìm thấy tài xế"
+            setDriverFound(true);
+            setDriverName(payload.driverName || 'Tài xế');
+            
+            // Sau 2 giây, chuyển sang trang đơn hàng và mở chi tiết đơn
             setTimeout(() => {
-               navigate(`/dashboard/order-tracking/${createdOrderId}`)
-            }, 1500)
+               setShowFindingModal(false);
+               navigate(`/dashboard/orders?orderId=${createdOrderId}&openDetail=true`)
+            }, 2000)
          }
       })
 
       return () => {
-         socket.disconnect()
+         if (socketRef.current) {
+            socketRef.current.disconnect()
+         }
       }
    }, [createdOrderId, user?._id, navigate])
 
@@ -289,7 +308,9 @@ export default function OrderCreate() {
             pickupLat,
             pickupLng,
             dropoffLat,
-            dropoffLng
+            dropoffLng,
+            loadingService = false,
+            insurance = false
          } = values;
 
          // Validate tọa độ
@@ -322,8 +343,8 @@ export default function OrderCreate() {
                pricePerKm: item.vehicleInfo?.pricePerKm || null,
                weightKg: item.weightKg,
                distanceKm: item.distanceKm,
-               loadingService: item.loadingService,
-               insurance: item.insurance,
+               loadingService: item.loadingService !== undefined ? item.loadingService : loadingService,
+               insurance: item.insurance !== undefined ? item.insurance : insurance,
                itemPhotos: []
             }))
          };
@@ -334,17 +355,21 @@ export default function OrderCreate() {
          if (response.data?.success) {
             const orderId = response.data.data._id;
             setCreatedOrderId(orderId);
-            message.success("Đã tạo đơn hàng, đang tìm tài xế gần bạn...");
+            setDriverFound(false);
+            setDriverName(null);
             setFindingDrivers(false);
-            // Không navigate ngay, đợi tài xế nhận đơn
+            setShowFindingModal(true); // Hiển thị popup ngay lập tức
+            console.log('✅ Đơn hàng đã được tạo, hiển thị popup tìm tài xế:', orderId);
          } else {
             message.error("Lỗi khi tạo đơn hàng: " + (response.data?.message || "Vui lòng thử lại"));
             setFindingDrivers(false);
+            setShowFindingModal(false);
          }
       } catch (error) {
          console.error("Lỗi khi tìm tài xế:", error);
          message.error("Lỗi khi tìm tài xế: " + (error.response?.data?.message || error.message || "Vui lòng thử lại"));
          setFindingDrivers(false);
+         setShowFindingModal(false);
       }
    };
 
@@ -375,20 +400,13 @@ export default function OrderCreate() {
             />
          )}
 
-         {/* Hiển thị trạng thái đang tìm tài xế */}
-         {createdOrderId && (
-            <Card className="mt-4">
-               <div className="text-center py-6">
-                  <div className="text-2xl font-semibold mb-2 text-blue-600">Đang tìm tài xế...</div>
-                  <div className="text-gray-600 mb-4">
-                     Hệ thống đang quét các tài xế gần bạn trong bán kính 2km
-                  </div>
-                  <div className="text-sm text-gray-500">
-                     Vui lòng đợi tài xế xác nhận nhận đơn
-                  </div>
-               </div>
-            </Card>
-         )}
+         {/* Popup tìm tài xế */}
+         <FindingDriverModal
+            visible={showFindingModal && !!createdOrderId}
+            orderId={createdOrderId}
+            driverFound={driverFound}
+            driverName={driverName}
+         />
 
          {/* Chọn loại xe - Đơn giản hóa: không cần chọn xe cụ thể */}
          {orderItems.length === 0 && (

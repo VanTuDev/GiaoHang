@@ -15,5 +15,6 @@ export const ORDER_ENDPOINTS = {
   driverMyOrders: "/api/orders/driver/my-orders",
   driverAvailableOrders: "/api/orders/driver/available",
   acceptItem: (orderId, itemId) => `/api/orders/${orderId}/items/${itemId}/accept`,
+  rejectItem: (orderId, itemId) => `/api/orders/${orderId}/items/${itemId}/reject`,
   updateItemStatus: (orderId, itemId) => `/api/orders/${orderId}/items/${itemId}/status`,
 };

@@ -29,8 +29,10 @@ import {
    CloseCircleOutlined
 } from '@ant-design/icons';
 import { driverService } from '../../features/driver/api/driverService';
+import { profileService } from '../../features/profile/api/profileService';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import { uploadToCloudinary } from '../../utils/cloudinaryService';
+import ChangePasswordModal from '../../components/modal/ChangePasswordModal';
 
 const { TabPane } = Tabs;
 
@@ -46,6 +48,7 @@ export default function DriverProfile() {
    const [avatarUrl, setAvatarUrl] = useState(null);
    const [fileList, setFileList] = useState([]);
    const [uploadingAvatar, setUploadingAvatar] = useState(false);
+   const [changePasswordOpen, setChangePasswordOpen] = useState(false);
 
    // Tải thông tin tài xế
    useEffect(() => {
@@ -310,14 +313,22 @@ export default function DriverProfile() {
                                  </Row>
 
                                  <Form.Item>
-                                    <Button
-                                       type="primary"
-                                       htmlType="submit"
-                                       loading={submitting}
-                                       className="bg-blue-600"
-                                    >
-                                       Cập nhật thông tin
-                                    </Button>
+                                    <div className="flex gap-2">
+                                       <Button
+                                          type="primary"
+                                          htmlType="submit"
+                                          loading={submitting}
+                                          className="bg-blue-600"
+                                       >
+                                          Cập nhật thông tin
+                                       </Button>
+                                       <Button
+                                          type="default"
+                                          onClick={() => setChangePasswordOpen(true)}
+                                       >
+                                          Đổi mật khẩu
+                                       </Button>
+                                    </div>
                                  </Form.Item>
                               </Form>
                            </Card>
@@ -506,6 +517,8 @@ export default function DriverProfile() {
                </Tabs>
             </>
          )}
+
+         <ChangePasswordModal open={changePasswordOpen} onClose={() => setChangePasswordOpen(false)} />
       </div>
    );
 }

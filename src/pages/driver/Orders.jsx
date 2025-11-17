@@ -51,8 +51,7 @@ export default function DriverOrders() {
    const [loading, setLoading] = useState(false);
    const [error, setError] = useState(null);
    const [orders, setOrders] = useState([]);
-   const [availableOrders, setAvailableOrders] = useState([]);
-   const [counts, setCounts] = useState({ active: 0, available: 0, completed: 0, cancelled: 0 });
+   const [counts, setCounts] = useState({ active: 0, completed: 0, cancelled: 0 });
    const [selectedOrder, setSelectedOrder] = useState(null);
    const [detailModalVisible, setDetailModalVisible] = useState(false);
    const [updatingStatus, setUpdatingStatus] = useState(false);
@@ -93,36 +92,31 @@ export default function DriverOrders() {
       activeTabRef.current = activeTab;
    }, [activeTab]);
 
-   // Hàm refetch danh sách đơn có sẵn
-   const refetchAvailableOrders = async () => {
+
+   // Hàm để tải lại danh sách đơn hàng (có thể gọi từ bất kỳ đâu)
+   const refetchOrders = async () => {
+      console.log('\n🚀 [FRONTEND] ========== REFETCH ĐƠN HÀNG ==========');
+      console.log('📋 [FRONTEND] Active tab:', activeTab);
+      setLoading(true);
+      setError(null);
+
       try {
-         console.log('\n🔄 [FRONTEND] ========== REFETCH ĐƠN CÓ SẴN ==========');
-         console.log('📤 [FRONTEND] Gọi API getAvailableOrders...');
-         // Thêm timestamp để tránh cache (304 Not Modified)
-         const response = await orderService.getAvailableOrders({
-            _t: Date.now() // Timestamp để bypass cache
-         });
-         console.log('📥 [FRONTEND] Response từ API:', {
-            success: response.data?.success,
-            dataCount: response.data?.data?.length || 0,
-            meta: response.data?.meta,
-            data: response.data?.data
-         });
+         // Tải danh sách đơn hàng của tài xế
+         const status = activeTab === 'active' ? 'Accepted,PickedUp,Delivering' :
+            activeTab === 'completed' ? 'Delivered' :
+               activeTab === 'received' ? 'Accepted' : 'Cancelled';
+
+         const response = await orderService.getDriverOrders({ status });
          if (response.data?.success) {
-            setAvailableOrders(response.data.data || []);
-            // Cập nhật count
-            const total = response.data?.meta?.total || response.data.data?.length || 0;
-            setCounts((c) => ({ ...c, available: total }));
-            console.log('✅ [FRONTEND] Đã cập nhật state:', {
-               availableOrdersCount: response.data.data?.length || 0,
-               total: total
-            });
+            setOrders(response.data.data || []);
          } else {
-            console.log('❌ [FRONTEND] API trả về success: false');
+            setError("Không thể tải danh sách đơn hàng");
          }
-         console.log('✅ [FRONTEND] ===========================================\n');
       } catch (error) {
-         console.error("❌ [FRONTEND] Lỗi khi tải lại danh sách đơn có sẵn:", error);
+         console.error("Lỗi khi tải danh sách đơn hàng:", error);
+         setError("Lỗi khi tải danh sách đơn hàng: " + (error.response?.data?.message || error.message));
+      } finally {
+         setLoading(false);
       }
    };
 
@@ -135,46 +129,18 @@ export default function DriverOrders() {
          setError(null);
 
          try {
-            if (activeTab === 'available') {
-               // Tải danh sách đơn hàng có sẵn để nhận
-               console.log('📤 [FRONTEND] Gọi API getAvailableOrders...');
-               // Thêm timestamp để tránh cache
-               const response = await orderService.getAvailableOrders({
-                  _t: Date.now()
-               });
-               console.log('📥 [FRONTEND] Response từ API getAvailableOrders:', {
-                  success: response.data?.success,
-                  dataCount: response.data?.data?.length || 0,
-                  meta: response.data?.meta,
-                  data: response.data?.data
-               });
-               if (response.data?.success) {
-                  setAvailableOrders(response.data.data || []);
-                  // Cập nhật count
-                  const total = response.data?.meta?.total || response.data.data?.length || 0;
-                  setCounts((c) => ({ ...c, available: total }));
-                  console.log('✅ [FRONTEND] Đã cập nhật state availableOrders:', {
-                     count: response.data.data?.length || 0,
-                     total: total
-                  });
-               } else {
-                  console.log('❌ [FRONTEND] API trả về success: false');
-                  setError("Không thể tải danh sách đơn hàng có sẵn");
-               }
-            } else {
-               // Tải danh sách đơn hàng của tài xế
-               // Sử dụng trạng thái để lọc đơn hàng theo tab hiện tại
-               const status = activeTab === 'active' ? 'Accepted,PickedUp,Delivering' :
-                  activeTab === 'completed' ? 'Delivered' :
-                     activeTab === 'received' ? 'Accepted' : 'Cancelled';
+            // Tải danh sách đơn hàng của tài xế
+            // Sử dụng trạng thái để lọc đơn hàng theo tab hiện tại
+            const status = activeTab === 'active' ? 'Accepted,PickedUp,Delivering' :
+               activeTab === 'completed' ? 'Delivered' :
+                  activeTab === 'received' ? 'Accepted' : 'Cancelled';
 
-               const response = await orderService.getDriverOrders({ status });
-               if (response.data?.success) {
-                  console.log('Fetched orders:', response.data.data);
-                  setOrders(response.data.data || []);
-               } else {
-                  setError("Không thể tải danh sách đơn hàng");
-               }
+            const response = await orderService.getDriverOrders({ status });
+            if (response.data?.success) {
+               console.log('Fetched orders:', response.data.data);
+               setOrders(response.data.data || []);
+            } else {
+               setError("Không thể tải danh sách đơn hàng");
             }
          } catch (error) {
             console.error("Lỗi khi tải danh sách đơn hàng:", error);
@@ -185,21 +151,6 @@ export default function DriverOrders() {
       };
 
       fetchOrders();
-
-      // Nếu đang ở tab "available", thêm interval polling mỗi 10 giây để đảm bảo data luôn fresh
-      let intervalId = null;
-      if (activeTab === 'available') {
-         intervalId = setInterval(() => {
-            console.log('🔄 Auto-refresh đơn có sẵn...');
-            refetchAvailableOrders();
-         }, 10000); // 10 giây
-      }
-
-      return () => {
-         if (intervalId) {
-            clearInterval(intervalId);
-         }
-      };
    }, [activeTab]);
 
    // Xác định xem tài xế có thể báo cáo tài xế khác không
@@ -236,7 +187,7 @@ export default function DriverOrders() {
             const cancelRes = await orderService.getDriverOrders({ status: 'Cancelled', page: 1, limit: 1 });
             const cancelled = cancelRes.data?.meta?.total || 0;
 
-            setCounts({ active, available, completed, cancelled });
+            setCounts({ active, completed, cancelled });
          } catch (e) {
             // im lặng để không làm phiền UI
          }
@@ -247,9 +198,6 @@ export default function DriverOrders() {
 
    // Kết nối Socket.IO để nhận đơn mới realtime
    useEffect(() => {
-      // Tránh kết nối nhiều lần
-      if (socketRef.current) return;
-
       // Lấy driverId trước khi kết nối socket
       const setupSocket = async () => {
          try {
@@ -260,6 +208,13 @@ export default function DriverOrders() {
             if (!driverId) {
                console.error('❌ [Socket] Không thể lấy driverId');
                return;
+            }
+
+            // Disconnect socket cũ nếu có
+            if (socketRef.current) {
+               console.log('🔄 [Socket] Đang disconnect socket cũ...');
+               socketRef.current.disconnect();
+               socketRef.current = null;
             }
 
             // Lấy Socket.IO URL từ biến môi trường
@@ -276,44 +231,39 @@ export default function DriverOrders() {
                }
             }
 
-            const socket = io(SOCKET_URL, { transports: ['websocket'], withCredentials: false });
+            console.log(`🔌 [Socket] Đang kết nối đến ${SOCKET_URL}...`);
+            const socket = io(SOCKET_URL, { 
+               transports: ['websocket'], 
+               withCredentials: false,
+               reconnection: true,
+               reconnectionDelay: 1000,
+               reconnectionAttempts: 5
+            });
             socketRef.current = socket;
 
             socket.on('connect', () => {
+               console.log(`✅ [Socket] Đã kết nối thành công với socket ID: ${socket.id}`);
                setSocketConnected(true);
+               
                // Join room cho tài xế với driverId thực tế
                socket.emit('driver:join', driverId.toString());
-               console.log(`✅ [Socket] Driver ${driverId} đã join room "drivers" và "driver:${driverId}"`);
+               console.log(`📤 [Socket] Đã emit driver:join với driverId: ${driverId}`);
+            });
+
+            socket.on('connect_error', (error) => {
+               console.error('❌ [Socket] Lỗi kết nối:', error);
+               setSocketConnected(false);
             });
 
             socket.on('disconnect', () => {
                setSocketConnected(false);
             });
 
-            socket.on('order:available:new', (payload) => {
-               console.log('\n📨 [FRONTEND] ========== NHẬN SOCKET EVENT ==========');
-               console.log('📥 [FRONTEND] Socket event: order:available:new', payload);
-               console.log('📋 [FRONTEND] Active tab hiện tại:', activeTabRef.current);
+            // Note: order:popup:new được xử lý bởi DriverOrderPopupManager trong DriverDashboardLayout
+            // để hiển thị popup ở mọi trang, không chỉ trang orders
 
-               // Thông báo có đơn hàng mới
-               message.info({
-                  content: 'Có đơn hàng mới! Đang tải danh sách...',
-                  duration: 3
-               });
-
-               // Luôn refetch để đảm bảo có data mới nhất
-               // Kiểm tra tab hiện tại và tự động refetch nếu đang ở tab "available"
-               if (activeTabRef.current === 'available') {
-                  // Tự động refetch để hiển thị đơn mới ngay lập tức
-                  console.log('🔄 [FRONTEND] Đang ở tab "available", refetch ngay...');
-                  refetchAvailableOrders();
-               } else {
-                  // Nếu đang ở tab khác, tăng badge count và vẫn refetch để cập nhật count chính xác
-                  console.log('📊 [FRONTEND] Đang ở tab khác, refetch để cập nhật count...');
-                  refetchAvailableOrders(); // Vẫn refetch để cập nhật count chính xác
-               }
-               console.log('✅ [FRONTEND] ===========================================\n');
-            });
+            // Note: order:available:new không còn được sử dụng vì đã bỏ tab "Đơn có sẵn"
+            // Đơn mới sẽ được gửi qua popup (order:popup:new) được xử lý bởi DriverOrderPopupManager
          } catch (error) {
             console.error('❌ [Socket] Lỗi khi setup socket:', error);
          }
@@ -326,7 +276,9 @@ export default function DriverOrders() {
             if (socketRef.current) {
                socketRef.current.disconnect();
             }
-         } catch { }
+         } catch (error) {
+            console.error('❌ [Socket] Lỗi khi cleanup socket:', error);
+         }
          socketRef.current = null;
       };
    }, []); // Chỉ chạy một lần khi mount
@@ -372,26 +324,19 @@ export default function DriverOrders() {
       setReportModalVisible(true);
    };
 
-   // Nhận đơn hàng
+   // Nhận đơn hàng từ danh sách (popup được xử lý bởi DriverOrderPopupManager)
    const handleAcceptOrder = async (orderId, itemId) => {
       try {
          const response = await orderService.acceptItem(orderId, itemId);
          if (response.data?.success) {
             message.success("Nhận đơn hàng thành công! Đơn đã được chuyển sang tab 'Đơn đang giao'");
 
-            // Cập nhật lại danh sách đơn có sẵn (xóa item vừa nhận)
-            if (activeTab === 'available') {
-               await refetchAvailableOrders();
-            }
 
             // Chuyển sang tab "active" để xem đơn vừa nhận
             setActiveTab('active');
 
             // Refetch lại danh sách đơn đang giao để hiển thị đơn mới nhận
-            const statusResponse = await orderService.getDriverOrders({ status: 'Accepted,PickedUp,Delivering' });
-            if (statusResponse.data?.success) {
-               setOrders(statusResponse.data.data || []);
-            }
+            await refetchOrders();
          } else {
             message.error(response.data?.message || "Không thể nhận đơn hàng");
          }
@@ -400,6 +345,7 @@ export default function DriverOrders() {
          message.error("Lỗi khi nhận đơn hàng: " + (error.response?.data?.message || error.message));
       }
    };
+
 
    // Cập nhật trạng thái đơn hàng
    const handleUpdateStatus = async (orderId, itemId, status) => {
@@ -434,7 +380,7 @@ export default function DriverOrders() {
    };
 
    // Sau khi khách thanh toán, tài xế bấm "Đã nhận thanh toán" để xác nhận thủ công
-   // Hệ thống sẽ tự động: cập nhật status = Delivered, cộng tiền vào tài khoản, tạo giao dịch
+   // Hệ thống sẽ: chuyển sang "Đang giao" (Delivering), cộng tiền vào tài khoản, tạo giao dịch
    const handleConfirmPaid = async () => {
       if (!payOrderId || !payItemId) return;
 
@@ -448,35 +394,63 @@ export default function DriverOrders() {
          onOk: async () => {
             setUpdatingStatus(true);
             try {
-               // Cập nhật trạng thái item thành "Delivered"
-               // Backend sẽ tự động: cộng tiền vào incomeBalance, tạo DriverTransaction
-               const response = await orderService.updateItemStatus(payOrderId, payItemId, 'Delivered');
+               // Tìm order để kiểm tra paymentBy
+               const orderResponse = await orderService.getOrderDetail(payOrderId);
+               if (!orderResponse.data?.success) {
+                  message.error('Không thể tải thông tin đơn hàng');
+                  setUpdatingStatus(false);
+                  return;
+               }
 
-               if (response.data?.success) {
-                  message.success('Đã xác nhận thanh toán! Tiền đã được cộng vào tài khoản của bạn.');
+               const order = orderResponse.data.data;
+               const item = order.items.find(i => String(i._id) === String(payItemId));
+               
+               if (!item) {
+                  message.error('Không tìm thấy item trong đơn hàng');
+                  setUpdatingStatus(false);
+                  return;
+               }
 
-                  // Đóng modal
-                  setPaymentModalVisible(false);
-                  setDetailModalVisible(false);
-
-                  // Chuyển sang tab "Đã hoàn thành"
-                  setActiveTab('completed');
-
-                  // Refresh danh sách đơn hàng
-                  const statusResponse = await orderService.getDriverOrders({ status: 'Delivered' });
-                  if (statusResponse.data?.success) {
-                     setOrders(statusResponse.data.data || []);
+               // Nếu paymentBy = 'sender' và status = 'PickedUp': 
+               // Chuyển sang Delivering (thanh toán đã xong, bắt đầu giao hàng)
+               if (order.paymentBy === 'sender' && item.status === 'PickedUp') {
+                  const response = await orderService.updateItemStatus(payOrderId, payItemId, 'Delivering');
+                  
+                  if (response.data?.success) {
+                     message.success('Đã xác nhận thanh toán! Bắt đầu giao hàng. Tiền đã được cộng vào tài khoản của bạn.');
+                     setPaymentModalVisible(false);
+                     setPayOrderId(null);
+                     setPayItemId(null);
+                     setPayAmount(0);
+                     
+                     // Refresh danh sách đơn
+                     await refetchOrders();
+                     setDetailModalVisible(false);
+                     setActiveTab('active');
+                  } else {
+                     message.error(response.data?.message || 'Không thể cập nhật trạng thái đơn hàng');
                   }
-
-                  // Cập nhật lại chi tiết đơn hàng nếu modal vẫn mở
-                  if (selectedOrder) {
-                     const detailRes = await orderService.getOrderDetail(payOrderId);
-                     if (detailRes.data?.success) {
-                        setSelectedOrder(detailRes.data.data);
-                     }
+               } else if (order.paymentBy === 'receiver' && item.status === 'Delivering') {
+                  // Nếu paymentBy = 'receiver' và status = 'Delivering': 
+                  // Chuyển sang Delivered (thanh toán đã xong, hoàn thành đơn)
+                  const response = await orderService.updateItemStatus(payOrderId, payItemId, 'Delivered');
+                  
+                  if (response.data?.success) {
+                     message.success('Đã xác nhận thanh toán! Tiền đã được cộng vào tài khoản của bạn.');
+                     setPaymentModalVisible(false);
+                     setPayOrderId(null);
+                     setPayItemId(null);
+                     setPayAmount(0);
+                     
+                     // Refresh danh sách đơn
+                     await refetchOrders();
+                     setDetailModalVisible(false);
+                     setActiveTab('completed');
+                  } else {
+                     message.error(response.data?.message || 'Không thể cập nhật trạng thái đơn hàng');
                   }
                } else {
-                  message.error(response.data?.message || 'Không thể xác nhận thanh toán');
+                  message.error('Trạng thái đơn hàng không hợp lệ để xác nhận thanh toán');
                }
             } catch (error) {
                console.error('Lỗi xác nhận thanh toán:', error);
@@ -577,105 +551,6 @@ export default function DriverOrders() {
          );
       }
 
-      if (activeTab === 'available') {
-         if (availableOrders.length === 0) {
-            return (
-               <Empty
-                  image={Empty.PRESENTED_IMAGE_SIMPLE}
-                  description="Không có đơn hàng nào có sẵn để nhận"
-               />
-            );
-         }
-
-         return (
-            <div className="space-y-4">
-               {availableOrders.map((order) => (
-                  <Card key={order._id} className="shadow-lg hover:shadow-xl transition-shadow border-l-4 border-l-green-500">
-                     <div className="space-y-4">
-                        {/* Header */}
-                        <div className="flex items-center justify-between">
-                           <div className="flex items-center space-x-3">
-                              <Avatar icon={<UserOutlined />} className="bg-blue-100" />
-                              <div>
-                                 <h3 className="font-semibold text-lg">{order.customerId?.name || "Khách hàng"}</h3>
-                                 <p className="text-sm text-gray-500">{formatDate(order.createdAt, true)}</p>
-                              </div>
-                           </div>
-                           <div className="text-right">
-                              <div className="text-2xl font-bold text-green-600">
-                                 {formatCurrency(order.totalPrice)}
-                              </div>
-                              <Tag color="green" className="text-sm">Đơn hàng mới</Tag>
-                           </div>
-                        </div>
-
-                        {/* Address */}
-                        <div className="bg-gray-50 p-4 rounded-lg">
-                           <Row gutter={[16, 8]}>
-                              <Col span={12}>
-                                 <div className="flex items-start">
-                                    <EnvironmentOutlined className="text-green-500 mr-2 mt-1" />
-                                    <div>
-                                       <p className="font-medium text-green-700">Điểm lấy hàng</p>
-                                       <p className="text-sm">{order.pickupAddress}</p>
-                                    </div>
-                                 </div>
-                              </Col>
-                              <Col span={12}>
-                                 <div className="flex items-start">
-                                    <EnvironmentOutlined className="text-red-500 mr-2 mt-1" />
-                                    <div>
-                                       <p className="font-medium text-red-700">Điểm giao hàng</p>
-                                       <p className="text-sm">{order.dropoffAddress}</p>
-                                    </div>
-                                 </div>
-                              </Col>
-                           </Row>
-                        </div>
-
-                        {/* Items - Chỉ hiển thị items có thể nhận (status = Created và chưa có driverId) */}
-                        <div className="space-y-3">
-                           {order.items.filter(item => item.status === 'Created' && !item.driverId).map((item) => (
-                              <div key={item._id} className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                                 <Row gutter={[16, 8]} align="middle">
-                                    <Col xs={24} sm={16}>
-                                       <div className="space-y-2">
-                                          <div className="flex items-center space-x-2">
-                                             <CarOutlined className="text-blue-500" />
-                                             <span className="font-semibold text-lg">{item.vehicleType}</span>
-                                          </div>
-                                          <div className="flex items-center space-x-4 text-sm text-gray-600">
-                                             <span>📦 {item.weightKg.toLocaleString()} kg</span>
-                                             <span>📏 {item.distanceKm} km</span>
-                                             <span>💰 {formatCurrency(item.priceBreakdown.total)}</span>
-                                          </div>
-                                          <div className="flex items-center space-x-2">
-                                             {item.loadingService && <Tag color="orange">Bốc xếp</Tag>}
-                                             {item.insurance && <Tag color="blue">Bảo hiểm</Tag>}
-                                          </div>
-                                       </div>
-                                    </Col>
-                                    <Col xs={24} sm={8}>
-                                       <Button
-                                          type="primary"
-                                          size="large"
-                                          className="w-full bg-green-600 hover:bg-green-700 border-green-600"
-                                          onClick={() => handleAcceptOrder(order._id, item._id)}
-                                          icon={<CheckCircleOutlined />}
-                                       >
-                                          Nhận đơn ngay
-                                       </Button>
-                                    </Col>
-                                 </Row>
-                              </div>
-                           ))}
-                        </div>
-                     </div>
-                  </Card>
-               ))}
-            </div>
-         );
-      }
 
       if (orders.length === 0) {
          return (
@@ -734,10 +609,11 @@ export default function DriverOrders() {
                               </div>
                            </div>
                            <div className="text-right">
+                              <div className="text-xs text-gray-500 mb-1">Tổng giá đơn hàng</div>
                               <div className="text-2xl font-bold text-blue-600">
                                  {formatCurrency(order.totalPrice)}
                               </div>
-                              <div className="flex items-center space-x-2">
+                              <div className="flex items-center space-x-2 mt-1">
                                  {getStatusIcon()}
                                  <Tag color={activeTab === 'active' ? 'blue' : activeTab === 'completed' ? 'green' :
                                     activeTab === 'received' ? 'yellow' : 'red'}>
@@ -774,27 +650,34 @@ export default function DriverOrders() {
 
                         {/* Items */}
                         <div className="space-y-3">
-                           {filteredItems.map((item) => (
-                              <div key={item._id} className="bg-blue-50 p-4 rounded-lg border border-blue-200">
-                                 <Row gutter={[16, 8]} align="middle">
-                                    <Col xs={24} sm={16}>
-                                       <div className="space-y-2">
-                                          <div className="flex items-center space-x-2">
-                                             <CarOutlined className="text-blue-500" />
-                                             <span className="font-semibold text-lg">{item.vehicleType}</span>
-                                             {renderOrderStatus(item.status)}
+                           {filteredItems.map((item) => {
+                              // Tính thu nhập tài xế: 80% của tổng giá (trừ phí hoa hồng 20%)
+                              const breakdown = item.priceBreakdown || {};
+                              const driverRevenue = Math.round((breakdown.total || 0) * 0.8);
+                              
+                              return (
+                                 <div key={item._id} className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                                    <Row gutter={[16, 8]} align="middle">
+                                       <Col xs={24} sm={16}>
+                                          <div className="space-y-2">
+                                             <div className="flex items-center space-x-2">
+                                                <CarOutlined className="text-blue-500" />
+                                                <span className="font-semibold text-lg">{item.vehicleType}</span>
+                                                {renderOrderStatus(item.status)}
+                                             </div>
+                                             <div className="flex items-center space-x-4 text-sm text-gray-600">
+                                                <span>📦 {item.weightKg.toLocaleString()} kg</span>
+                                                <span>📏 {item.distanceKm} km</span>
+                                                <span className="font-semibold text-green-600 text-base">
+                                                   💰 {formatCurrency(driverRevenue)}
+                                                </span>
+                                             </div>
+                                             <div className="flex items-center space-x-2">
+                                                {item.loadingService && <Tag color="orange">Bốc xếp</Tag>}
+                                                {item.insurance && <Tag color="blue">Bảo hiểm</Tag>}
+                                             </div>
                                           </div>
-                                          <div className="flex items-center space-x-4 text-sm text-gray-600">
-                                             <span>📦 {item.weightKg.toLocaleString()} kg</span>
-                                             <span>📏 {item.distanceKm} km</span>
-                                             <span>💰 {formatCurrency(item.priceBreakdown.total)}</span>
-                                          </div>
-                                          <div className="flex items-center space-x-2">
-                                             {item.loadingService && <Tag color="orange">Bốc xếp</Tag>}
-                                             {item.insurance && <Tag color="blue">Bảo hiểm</Tag>}
-                                          </div>
-                                       </div>
-                                    </Col>
+                                       </Col>
                                     <Col xs={24} sm={8}>
                                        <Space direction="vertical" className="w-full">
                                           <Button
@@ -811,7 +694,8 @@ export default function DriverOrders() {
                                     </Col>
                                  </Row>
                               </div>
-                           ))}
+                              );
+                           })}
                         </div>
                      </div>
                   </Card>
@@ -831,7 +715,7 @@ export default function DriverOrders() {
                   <p className="text-blue-100">Theo dõi và quản lý các đơn hàng của bạn</p>
                </div>
                <div className="text-right">
-                  <div className="text-4xl font-bold">{orders.length + availableOrders.length}</div>
+                  <div className="text-4xl font-bold">{orders.length}</div>
                   <p className="text-blue-100">Tổng đơn hàng</p>
                </div>
             </div>
@@ -846,16 +730,6 @@ export default function DriverOrders() {
                      value={orders.filter(order => order.items.some(item => ['Accepted', 'PickedUp', 'Delivering'].includes(item.status))).length}
                      valueStyle={{ color: '#1890ff' }}
                      prefix={<CarOutlined />}
-                  />
-               </Card>
-            </Col>
-            <Col xs={24} sm={6}>
-               <Card className="text-center hover:shadow-lg transition-shadow">
-                  <Statistic
-                     title="Đơn có sẵn"
-                     value={availableOrders.length}
-                     valueStyle={{ color: '#52c41a' }}
-                     prefix={<ClockCircleOutlined />}
                   />
                </Card>
             </Col>
@@ -895,17 +769,6 @@ export default function DriverOrders() {
                            <CarOutlined />
                            <span>Đơn đang giao</span>
                            <Badge count={counts.active} />
-                        </span>
-                     ),
-                     children: renderOrders()
-                  },
-                  {
-                     key: 'available',
-                     label: (
-                        <span className="flex items-center space-x-2">
-                           <ClockCircleOutlined />
-                           <span>Đơn có sẵn</span>
-                           <Badge count={counts.available} />
                         </span>
                      ),
                      children: renderOrders()
@@ -980,7 +843,7 @@ export default function DriverOrders() {
                            <div className="space-y-2">
                               <div className="flex items-center space-x-2">
                                  <DollarOutlined className="text-green-500" />
-                                 <span className="font-medium">Tổng giá trị</span>
+                                 <span className="font-medium">Tổng giá đơn hàng</span>
                               </div>
                               <p className="text-2xl font-bold text-green-600">{formatCurrency(selectedOrder.totalPrice)}</p>
                               <p className="text-sm text-gray-500">Mã đơn: #{selectedOrder._id?.slice(-8)}</p>
@@ -1019,6 +882,10 @@ export default function DriverOrders() {
                         // Chỉ hiển thị item của tài xế hiện tại
                         if (!item.driverId) return null;
 
+                        // Tính thu nhập tài xế: 80% của tổng giá (trừ phí hoa hồng 20%)
+                        const breakdown = item.priceBreakdown || {};
+                        const driverRevenue = Math.round((breakdown.total || 0) * 0.8);
+
                         return (
                            <div key={item._id} className="space-y-4">
                               <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
@@ -1033,7 +900,9 @@ export default function DriverOrders() {
                                           <div className="flex items-center space-x-4 text-sm text-gray-600">
                                              <span>📦 {item.weightKg.toLocaleString()} kg</span>
                                              <span>📏 {item.distanceKm} km</span>
-                                             <span>💰 {formatCurrency(item.priceBreakdown.total)}</span>
+                                             <span className="font-semibold text-green-600 text-base">
+                                                💰 {formatCurrency(driverRevenue)}
+                                             </span>
                                           </div>
                                           <div className="flex items-center space-x-2">
                                              {item.loadingService && <Tag color="orange">Bốc xếp</Tag>}
@@ -1043,10 +912,10 @@ export default function DriverOrders() {
                                     </Col>
                                     <Col xs={24} sm={8}>
                                        <div className="text-right">
-                                          <div className="text-2xl font-bold text-blue-600">
-                                             {formatCurrency(item.priceBreakdown.total)}
+                                          <div className="text-2xl font-bold text-green-600">
+                                             {formatCurrency(driverRevenue)}
                                           </div>
-                                          <p className="text-sm text-gray-500">Thu nhập dự kiến</p>
+                                          <p className="text-sm text-gray-500">Thu nhập tài xế</p>
                                        </div>
                                     </Col>
                                  </Row>
@@ -1060,25 +929,34 @@ export default function DriverOrders() {
                                  <h4 className="font-medium mb-3">Chi phí chi tiết</h4>
                                  <div className="space-y-2">
                                     <div className="flex justify-between">
-                                       <span>Cước phí ({formatCurrency(item.priceBreakdown.basePerKm)}/km × {item.distanceKm}km):</span>
-                                       <span className="font-medium">{formatCurrency(item.priceBreakdown.distanceCost)}</span>
+                                       <span>Cước phí ({formatCurrency(breakdown.basePerKm || 0)}/km × {item.distanceKm}km):</span>
+                                       <span className="font-medium">{formatCurrency(breakdown.distanceCost || 0)}</span>
                                     </div>
                                     {item.loadingService && (
                                        <div className="flex justify-between">
                                           <span>Phí bốc xếp:</span>
-                                          <span className="font-medium">{formatCurrency(item.priceBreakdown.loadCost)}</span>
+                                          <span className="font-medium">{formatCurrency(breakdown.loadCost || 0)}</span>
                                        </div>
                                     )}
                                     {item.insurance && (
                                        <div className="flex justify-between">
                                           <span>Phí bảo hiểm:</span>
-                                          <span className="font-medium">{formatCurrency(item.priceBreakdown.insuranceFee)}</span>
+                                          <span className="font-medium">{formatCurrency(breakdown.insuranceFee || 0)}</span>
                                        </div>
                                     )}
                                     <Divider />
                                     <div className="flex justify-between font-bold text-lg">
-                                       <span>Tổng cộng:</span>
-                                       <span className="text-blue-600">{formatCurrency(item.priceBreakdown.total)}</span>
+                                       <span>Giá đơn:</span>
+                                       <span className="text-blue-600">{formatCurrency(breakdown.total || 0)}</span>
+                                    </div>
+                                    <div className="flex justify-between text-sm text-gray-500">
+                                       <span>Phí hoa hồng (20%):</span>
+                                       <span>-{formatCurrency(Math.round((breakdown.total || 0) * 0.2))}</span>
+                                    </div>
+                                    <Divider />
+                                    <div className="flex justify-between font-bold text-lg text-green-600">
+                                       <span>💰 Thu nhập tài xế:</span>
+                                       <span>{formatCurrency(driverRevenue)}</span>
                                     </div>
                                  </div>
                               </div>

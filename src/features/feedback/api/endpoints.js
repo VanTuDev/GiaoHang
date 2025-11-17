@@ -2,6 +2,7 @@ export const FEEDBACK_ENDPOINTS = {
    // Customer
    createFeedback: "/api/feedback",
    myFeedbacks: "/api/feedback/my-feedbacks",
+   deleteFeedback: (feedbackId) => `/api/feedback/${feedbackId}`,
 
    // Public
    driverFeedbacks: (driverId) => `/api/feedback/driver/${driverId}`,

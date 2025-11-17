@@ -23,6 +23,9 @@ export const orderService = {
    // Driver: Nhận đơn hàng
    acceptItem: (orderId, itemId) => axiosClient.put(ORDER_ENDPOINTS.acceptItem(orderId, itemId)),
 
+   // Driver: Từ chối đơn hàng
+   rejectItem: (orderId, itemId) => axiosClient.put(ORDER_ENDPOINTS.rejectItem(orderId, itemId)),
+
    // Driver: Cập nhật trạng thái đơn hàng
    updateItemStatus: (orderId, itemId, status) => axiosClient.put(ORDER_ENDPOINTS.updateItemStatus(orderId, itemId), { status }),
 

@@ -1,9 +1,11 @@
 import { Dropdown, Avatar } from "antd";
+import { LockOutlined } from "@ant-design/icons";
 
-export default function UserDropdown({ user, onInfo, onSettings, onLogout, onUpgradeDriver, children }) {
+export default function UserDropdown({ user, onInfo, onSettings, onChangePassword, onLogout, onUpgradeDriver, children }) {
    const items = [
       { key: "info", label: "Thông tin", onClick: onInfo },
       { key: "settings", label: "Cài đặt", onClick: onSettings },
+      { key: "change-password", label: "Đổi mật khẩu", icon: <LockOutlined />, onClick: onChangePassword },
       { type: "divider" },
       // { key: "upgrade-driver", label: "Nâng cấp hồ sơ tài xế", onClick: onUpgradeDriver },
       { key: "logout", label: "Đăng xuất", onClick: onLogout },
