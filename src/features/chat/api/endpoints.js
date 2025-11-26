@@ -5,3 +5,14 @@ export const CHAT_ENDPOINTS = {
    longPoll: (orderId) => `/api/chat/orders/${orderId}/long-poll`
 };
 
+
+
+
+
+
+
+
+
+
+
+

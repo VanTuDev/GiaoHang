@@ -46,7 +46,9 @@ export default function DriverApplyModal({ open, onClose, onSuccess }) {
          onSuccess?.();
          onClose?.();
       } catch (e) {
-         message.error("Nộp hồ sơ thất bại");
+         console.error("❌ [DriverApplyModal] Lỗi khi nộp hồ sơ:", e);
+         const errorMessage = e?.response?.data?.message || e?.response?.data?.error || e?.message || "Nộp hồ sơ thất bại";
+         message.error(errorMessage);
       } finally {
          setSubmitting(false);
       }

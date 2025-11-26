@@ -213,10 +213,10 @@ export default function BookVehicles() {
       }
 
       // Bắt đầu đếm ngược 2 phút (120 giây)
-      console.log('⏰ [BookVehicles] Bắt đầu đếm ngược 2 phút cho popup tìm tài xế')
+      console.log(' [BookVehicles] Bắt đầu đếm ngược 2 phút cho popup tìm tài xế')
       
       timeoutRef.current = setTimeout(() => {
-         console.log('⏰ [BookVehicles] Đã hết 2 phút, tự động đóng popup')
+         console.log(' [BookVehicles] Đã hết 2 phút, tự động đóng popup')
          
          // Đóng popup
          setShowFindingModal(false)
@@ -228,12 +228,12 @@ export default function BookVehicles() {
          
          // Thông báo cho user
          messageApi.warning({
-            content: 'Đã hết thời gian tìm tài xế (2 phút). Vui lòng bấm lại nút "Tìm tài xế" để tiếp tục.',
+            content: 'Không tìm thấy tài xế. Vui lòng bấm lại nút "Tìm tài xế" để tiếp tục tìm kiếm tài xế.',
             duration: 5
          })
          
          timeoutRef.current = null
-      }, 120000) // 2 phút = 120,000ms
+      }, 90000) // 2 phút = 120,000ms , 30 giây = 30,000ms
 
       return () => {
          if (timeoutRef.current) {

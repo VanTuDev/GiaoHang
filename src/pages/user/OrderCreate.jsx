@@ -1,7 +1,7 @@
 "use client"
 
-import React, { useState, useEffect, useRef } from "react"
-import { Form, message } from "antd"
+import React, { useState, useEffect, useRef, useCallback } from "react"
+import { Form, message, Card, Alert, Button, Spin } from "antd"
 import { useLocation, useNavigate } from "react-router-dom"
 import { io } from 'socket.io-client'
 
@@ -12,11 +12,12 @@ import OrderSummary from "./components/OrderSummary"
 import OrderForm from "./components/OrderForm"
 import VehicleTypeSelector from "./components/VehicleTypeSelector"
 import FindingDriverModal from "./components/FindingDriverModal"
-import { Card } from "antd"
 import { vehicleService } from "../../features/vehicles/api/vehicleService"
 import { orderService } from "../../features/orders/api/orderService"
 import { formatCurrency } from "../../utils/formatters"
 import useLocalUser from "../../authentication/hooks/useLocalUser"
+
+const ACTIVE_ITEM_STATUSES = ['Accepted', 'PickedUp', 'Delivering']
 
 export default function OrderCreate() {
    const [form] = Form.useForm();
@@ -48,7 +49,39 @@ export default function OrderCreate() {
    const [showFindingModal, setShowFindingModal] = useState(false);
    const user = useLocalUser();
    const socketRef = useRef(null);
+   const [checkingActiveOrder, setCheckingActiveOrder] = useState(true);
+   const [activeOrderInfo, setActiveOrderInfo] = useState(null);
 
+
+   const checkActiveOrder = useCallback(async ({ silent = false } = {}) => {
+      if (!silent) {
+         setCheckingActiveOrder(true);
+      }
+      try {
+         const response = await orderService.getMyOrders({});
+         if (response.data?.success) {
+            const orders = response.data.data || [];
+            const activeOrder = orders.find(order => {
+               if (order.status === 'InProgress') return true;
+               if (!Array.isArray(order.items)) return false;
+               return order.items.some(item => ACTIVE_ITEM_STATUSES.includes(item.status));
+            });
+            setActiveOrderInfo(activeOrder || null);
+         } else {
+            setActiveOrderInfo(null);
+         }
+      } catch (error) {
+         console.error("Lỗi khi kiểm tra đơn đang giao:", error);
+      } finally {
+         if (!silent) {
+            setCheckingActiveOrder(false);
+         }
+      }
+   }, []);
+
+   useEffect(() => {
+      checkActiveOrder();
+   }, [checkActiveOrder]);
 
    // Tải danh sách xe
    useEffect(() => {
@@ -292,6 +325,11 @@ export default function OrderCreate() {
 
    // Xử lý tìm tài xế (thay vì submit trực tiếp)
    const handleFindDrivers = async (values) => {
+      if (activeOrderInfo) {
+         message.warning("Bạn đang có đơn hàng đang được tài xế giao. Vui lòng hoàn thành trước khi tạo đơn mới.");
+         return;
+      }
+
       if (orderItems.length === 0) {
          message.error("Vui lòng chọn ít nhất một loại xe");
          return;
@@ -370,8 +408,53 @@ export default function OrderCreate() {
          message.error("Lỗi khi tìm tài xế: " + (error.response?.data?.message || error.message || "Vui lòng thử lại"));
          setFindingDrivers(false);
          setShowFindingModal(false);
+         await checkActiveOrder({ silent: true });
       }
    };
+
+   if (checkingActiveOrder) {
+      return (
+         <div className="flex items-center justify-center min-h-[60vh]">
+            <Spin size="large" tip="Đang kiểm tra đơn hàng của bạn..." />
+         </div>
+      );
+   }
+
+   if (activeOrderInfo) {
+      const activeItem = Array.isArray(activeOrderInfo.items)
+         ? activeOrderInfo.items.find(item => ACTIVE_ITEM_STATUSES.includes(item.status))
+         : null;
+
+      return (
+         <div className="p-4 md:p-8 flex justify-center">
+            <Card className="max-w-2xl w-full shadow-lg">
+               <h2 className="text-2xl font-semibold text-blue-900 mb-3">Bạn đang có đơn hàng đang giao</h2>
+               <Alert
+                  type="warning"
+                  showIcon
+                  className="mb-4"
+                  message={`Đơn #${String(activeOrderInfo._id).slice(-6)} đang được tài xế xử lý`}
+                  description={`Trạng thái hiện tại: ${activeItem?.status || activeOrderInfo.status || 'InProgress'}. Vui lòng hoàn thành hoặc hủy đơn này trước khi tạo đơn mới.`}
+               />
+               <div className="space-y-2 text-gray-600 mb-4">
+                  <p><span className="font-medium text-gray-800">Điểm đón:</span> {activeOrderInfo.pickupAddress || 'Đang cập nhật'}</p>
+                  <p><span className="font-medium text-gray-800">Điểm giao:</span> {activeOrderInfo.dropoffAddress || 'Đang cập nhật'}</p>
+               </div>
+               <div className="flex flex-wrap gap-3">
+                  <Button
+                     type="primary"
+                     onClick={() => navigate(`/dashboard/orders?orderId=${activeOrderInfo._id}&openDetail=true`)}
+                  >
+                     Xem chi tiết đơn
+                  </Button>
+                  <Button onClick={() => checkActiveOrder()}>
+                     Kiểm tra lại
+                  </Button>
+               </div>
+            </Card>
+         </div>
+      );
+   }
 
    return (
       <div className="h-full overflow-auto">
